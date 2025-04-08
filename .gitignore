@@ -1,0 +1,81 @@
+# Build directories and files
+build*/
+bin/
+obj/
+*.o
+*.obj
+*.exe
+*.out
+*.app
+*.so
+*.dylib
+*.dll
+*.a
+*.lib
+
+# Qt-specific generated files
+moc_*.cpp
+qrc_*.cpp
+ui_*.h
+*.qrc.depends
+*.qm
+Makefile*
+*.pro.user
+*.pro.user.*
+qmake.stash
+*.qmake.cache
+
+# C++ compiled files
+*.gch
+*.pch
+
+# Temporary files
+*.swp
+*~
+*.tmp
+*.bak
+*.log
+
+# Dependency directories
+deps/
+vendor/
+third_party/
+
+# IDE-specific files
+# Qt Creator
+*.autosave
+CMakeLists.txt.user
+*.cbp
+*.depend
+*.layout
+
+# Visual Studio Code
+.vscode/
+*.code-workspace
+
+# CLion
+.idea/
+cmake-build-*/
+
+# macOS-specific
+.DS_Store
+
+# Windows-specific
+Thumbs.db
+*.ilk
+*.pdb
+*.idb
+
+# Documentation and miscellaneous
+docs/_build/
+*.md.bak
+
+# Exclude build-related JSON, but keep user .tm files
+*.json  # Optional: exclude generated JSON, adjust if needed
+!*.tm   # Keep Turing Machine files (*.tm)
+
+# Python-related (if you use scripts)
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
