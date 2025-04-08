@@ -15,14 +15,11 @@ This document outlines the planned tasks and improvements for the Turing Machine
 - **[FEATURE]** Add global hotkey manager for consistent keyboard shortcuts throughout the application
 - **[FEATURE]** Implement "stop" functionality distinct from run/pause
 - **[FEATURE]** Support copy/paste operations for tape content
-- **[FIX]** Make tape automatically follow the head when it moves out of visible range
-- **[FEATURE]** Allow users to change tape values and head position by clicking/double-clicking cells
 - **[FEATURE]** Add support for saving multiple tapes in tabs within one project
 - **[FEATURE]** Disable tape editing during runtime (separate input tape from output)
 
 ## UI Enhancements
 
-- **[FEATURE]** Implement editor properties panel for machine and state configuration
 - **[FEATURE]** Make UI fully flexible with draggable, droppable, and resizable components
 - **[FEATURE]** Add better visual feedback during machine execution
 - **[FEATURE]** Support history viewing of previous runs to examine tape state during each transition

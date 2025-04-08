@@ -9,12 +9,16 @@
 
 TapeWidget::TapeWidget(QWidget *parent)
     : QWidget(parent), m_tape(nullptr), m_visibleCells(15), m_cellSize(40),
-      m_leftmostCell(0), m_headAnimOffset(0), m_headAnimation(0.0)
+      m_leftmostCell(0), m_headAnimOffset(0), m_headAnimation(0.0),
+      m_interactiveMode(true) // Default to interactive mode
 {
     // Setup widget
     setMinimumHeight(100);
     setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
     setFocusPolicy(Qt::StrongFocus);
+
+    // Enable context menu and mouse tracking
+    setContextMenuPolicy(Qt::DefaultContextMenu);
     
     // Setup update timer
     m_updateTimer = new QTimer(this);
@@ -25,6 +29,162 @@ TapeWidget::TapeWidget(QWidget *parent)
     m_headAnimationObj = new QPropertyAnimation(this, "headAnimation");
     m_headAnimationObj->setDuration(300); // 300ms animation
     m_headAnimationObj->setEasingCurve(QEasingCurve::OutCubic);
+}
+
+void TapeWidget::setInteractiveMode(bool enabled)
+{
+    m_interactiveMode = enabled;
+}
+
+void TapeWidget::mouseDoubleClickEvent(QMouseEvent *event)
+{
+    if (!m_interactiveMode || !m_tape) {
+        QWidget::mouseDoubleClickEvent(event);
+        return;
+    }
+
+    // Convert click position to cell index
+    int cellIndex = xToCell(event->pos().x());
+
+    // Edit the cell value
+    editCellValue(cellIndex);
+
+    QWidget::mouseDoubleClickEvent(event);
+}
+
+void TapeWidget::mousePressEvent(QMouseEvent *event)
+{
+    if (!m_interactiveMode || !m_tape) {
+        QWidget::mousePressEvent(event);
+        return;
+    }
+
+    if (event->button() == Qt::LeftButton) {
+        // Convert click position to cell index
+        int cellIndex = xToCell(event->pos().x());
+
+        // Move the head to the clicked cell
+        moveHeadToCell(cellIndex);
+    }
+
+    QWidget::mousePressEvent(event);
+}
+
+void TapeWidget::contextMenuEvent(QContextMenuEvent *event)
+{
+    if (!m_interactiveMode || !m_tape) {
+        QWidget::contextMenuEvent(event);
+        return;
+    }
+
+    // Convert position to cell index
+    int cellIndex = xToCell(event->pos().x());
+
+    // Create context menu
+    QMenu contextMenu(this);
+
+    QAction* editAction = contextMenu.addAction(tr("Edit Cell Value"));
+    QAction* moveHeadAction = contextMenu.addAction(tr("Move Head Here"));
+    QAction* clearAction = contextMenu.addAction(tr("Clear Cell"));
+
+    // Add separator for navigation options
+    contextMenu.addSeparator();
+    QAction* centerAction = contextMenu.addAction(tr("Center View on Head"));
+    QAction* resetZoomAction = contextMenu.addAction(tr("Reset Zoom"));
+
+    // Execute the menu and get the selected action
+    QAction* selectedAction = contextMenu.exec(event->globalPos());
+
+    if (selectedAction == editAction) {
+        editCellValue(cellIndex);
+    } else if (selectedAction == moveHeadAction) {
+        moveHeadToCell(cellIndex);
+    } else if (selectedAction == clearAction) {
+        if (m_tape) {
+            int originalHeadPos = m_tape->getHeadPosition();
+            m_tape->setHeadPosition(cellIndex);
+            m_tape->write(m_tape->getBlankSymbol());
+            m_tape->setHeadPosition(originalHeadPos); // Restore original head position
+            updateTapeDisplay();
+            emit cellValueChanged(cellIndex, m_tape->getBlankSymbol());
+            emit tapeModified();
+        }
+    } else if (selectedAction == centerAction) {
+        centerHeadPosition();
+        updateTapeDisplay();
+    } else if (selectedAction == resetZoomAction) {
+        resetZoom();
+    }
+}
+
+void TapeWidget::editCellValue(int cellIndex)
+{
+    if (!m_tape) return;
+
+    // Determine current value at the cell
+    int originalHeadPos = m_tape->getHeadPosition();
+    m_tape->setHeadPosition(cellIndex);
+    char currentSymbol = m_tape->read();
+
+    // Create string for current value (handling blank symbol)
+    QString currentValue = (currentSymbol == m_tape->getBlankSymbol()) ? "" : QString(currentSymbol);
+
+    // Show input dialog
+    bool ok;
+    QString newValue = QInputDialog::getText(this, tr("Edit Cell Value"),
+                                           tr("Enter new cell value (empty for blank):"),
+                                           QLineEdit::Normal,
+                                           currentValue, &ok);
+
+    // If user clicked OK and provided a value
+    if (ok) {
+        char newSymbol;
+        if (newValue.isEmpty()) {
+            newSymbol = m_tape->getBlankSymbol();
+        } else {
+            newSymbol = newValue.at(0).toLatin1(); // Just take the first character
+        }
+
+        // Write the new value
+        m_tape->write(newSymbol);
+
+        // Restore original head position
+        m_tape->setHeadPosition(originalHeadPos);
+
+        // Update display
+        updateTapeDisplay();
+
+        // Notify about the change
+        emit cellValueChanged(cellIndex, newSymbol);
+        emit tapeModified();
+    } else {
+        // Restore original head position
+        m_tape->setHeadPosition(originalHeadPos);
+    }
+}
+
+void TapeWidget::moveHeadToCell(int cellIndex)
+{
+    if (!m_tape) return;
+
+    // Get current head position
+    int oldPosition = m_tape->getHeadPosition();
+
+    // Only update if different from current position
+    if (cellIndex != oldPosition) {
+        // Determine if moving right or left
+        bool movingRight = cellIndex > oldPosition;
+
+        // Set the new head position
+        m_tape->setHeadPosition(cellIndex);
+
+        // Animate the head movement
+        animateHeadMovement(movingRight);
+
+        // Notify about the change
+        emit headPositionChanged(cellIndex);
+        emit tapeModified();
+    }
 }
 
 TapeWidget::~TapeWidget()
@@ -163,22 +323,6 @@ void TapeWidget::paintEvent(QPaintEvent *event)
 
     // Draw read/write head
     drawHead(painter);
-}
-
-void TapeWidget::mousePressEvent(QMouseEvent *event)
-{
-    if (event->button() == Qt::LeftButton) {
-        // Convert click position to cell index
-        int cellIndex = xToCell(event->pos().x());
-        
-        // Move head to clicked cell (disabled for now)
-        // if (m_tape) {
-        //     m_tape->setHeadPosition(cellIndex);
-        //     updateTapeDisplay();
-        // }
-    }
-    
-    QWidget::mousePressEvent(event);
 }
 
 void TapeWidget::mouseMoveEvent(QMouseEvent *event)

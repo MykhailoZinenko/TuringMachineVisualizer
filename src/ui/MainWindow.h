@@ -60,6 +60,9 @@ private slots:
     void onStatePropertiesChanged(const std::string& stateId);
     void onTransitionPropertiesChanged(const std::string& fromState, char readSymbol);
 
+    void onCellValueChanged(int position, char newValue);
+    void onHeadPositionChanged(int newPosition);
+
 private:
     // Data model
     std::unique_ptr<TuringMachine> turingMachine;

@@ -8,6 +8,7 @@
 #include <QLabel>
 #include <QSpinBox>
 #include <QSlider>
+#include <QCheckBox>
 #include "../model/Tape.h"
 #include "TapeWidget.h"
 
@@ -21,13 +22,15 @@ public:
 
     signals:
         void tapeContentChanged();
-        void speedChanged(int speed);
+    void speedChanged(int speed);
 
     public slots:
         void resetTape();
     void setTapeContent();
     void shiftLeft();
     void shiftRight();
+    void toggleInteractiveMode(bool enabled);
+    void onTapeModified();
 
 private:
     Tape* m_tape;
@@ -40,6 +43,7 @@ private:
     QToolButton* m_shiftLeftButton;
     QToolButton* m_shiftRightButton;
     QLabel* m_currentTapeLabel;
+    QCheckBox* m_interactiveModeCheckbox;
 
     QSlider* m_speedSlider;
     QLabel* m_speedLabel;

@@ -9,6 +9,9 @@ TapeControlWidget::TapeControlWidget(Tape* tape, TapeWidget* tapeWidget, QWidget
 {
     setupUI();
     updateCurrentTapeLabel();
+
+    // Connect to tape modification signal from TapeWidget
+    connect(m_tapeWidget, &TapeWidget::tapeModified, this, &TapeControlWidget::onTapeModified);
 }
 
 void TapeControlWidget::setTape(Tape* tape)
@@ -60,13 +63,19 @@ void TapeControlWidget::setupUI()
     QGroupBox* controlGroupBox = new QGroupBox(tr("Tape Controls"));
     QVBoxLayout* controlLayout = new QVBoxLayout(controlGroupBox);
     
+    // Add interactive mode toggle
+    m_interactiveModeCheckbox = new QCheckBox(tr("Interactive Mode (click to move head, double-click to edit)"), this);
+    m_interactiveModeCheckbox->setChecked(m_tapeWidget->isInteractiveMode());
+    connect(m_interactiveModeCheckbox, &QCheckBox::toggled, this, &TapeControlWidget::toggleInteractiveMode);
+    controlLayout->addWidget(m_interactiveModeCheckbox);
+
     // Current tape content display
     m_currentTapeLabel = new QLabel(this);
     m_currentTapeLabel->setAlignment(Qt::AlignCenter);
     m_currentTapeLabel->setFrameStyle(QFrame::Panel | QFrame::Sunken);
     m_currentTapeLabel->setMinimumHeight(30);
     controlLayout->addWidget(m_currentTapeLabel);
-    
+
     // Shift buttons
     QHBoxLayout* shiftLayout = new QHBoxLayout();
     m_shiftLeftButton = new QToolButton(this);
@@ -82,7 +91,7 @@ void TapeControlWidget::setupUI()
     shiftLayout->addWidget(m_shiftRightButton);
     shiftLayout->addStretch();
     controlLayout->addLayout(shiftLayout);
-    
+
     // Zoom controls
     QHBoxLayout* zoomLayout = new QHBoxLayout();
     QPushButton* zoomInButton = new QPushButton(tr("+"), this);
@@ -110,11 +119,26 @@ void TapeControlWidget::setupUI()
     speedLayout->addWidget(m_speedLabel);
     speedLayout->addWidget(m_speedSlider);
     controlLayout->addLayout(speedLayout);
-    
+
     // Add groups to main layout
     mainLayout->addWidget(inputGroupBox);
     mainLayout->addWidget(controlGroupBox);
     mainLayout->addStretch();
+}
+
+// Add the interactive mode toggle handler
+void TapeControlWidget::toggleInteractiveMode(bool enabled)
+{
+    if (m_tapeWidget) {
+        m_tapeWidget->setInteractiveMode(enabled);
+    }
+}
+
+// Add handler for tape modifications
+void TapeControlWidget::onTapeModified()
+{
+    updateCurrentTapeLabel();
+    emit tapeContentChanged();
 }
 
 void TapeControlWidget::resetTape()

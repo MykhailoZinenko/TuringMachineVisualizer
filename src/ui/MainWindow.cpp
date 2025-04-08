@@ -205,6 +205,35 @@ void MainWindow::setupCentralWidget()
 
     // Connect tape content changes
     connect(tapeControlWidget, &TapeControlWidget::tapeContentChanged, this, &MainWindow::handleTapeContentChanged);
+
+    // Connect interactive tape signals
+    connect(tapeWidget, &TapeWidget::cellValueChanged, this, &MainWindow::onCellValueChanged);
+    connect(tapeWidget, &TapeWidget::headPositionChanged, this, &MainWindow::onHeadPositionChanged);
+}
+
+// Add handlers for tape interaction events
+void MainWindow::onCellValueChanged(int position, char newValue)
+{
+    // The tape has already been updated, just mark as dirty
+    setDirty();
+
+    statusBar()->showMessage(tr("Cell at position %1 changed to '%2'")
+                            .arg(position)
+                            .arg(QChar(newValue)), 2000);
+}
+
+void MainWindow::onHeadPositionChanged(int newPosition)
+{
+    // The tape head has already been moved, just mark as dirty
+    setDirty();
+
+    // Update state highlight if needed
+    StatesListWidget* statesWidget = qobject_cast<StatesListWidget*>(statesDock->widget());
+    if (statesWidget) {
+        statesWidget->highlightCurrentState(turingMachine->getCurrentState());
+    }
+
+    statusBar()->showMessage(tr("Head moved to position %1").arg(newPosition), 2000);
 }
 
 void MainWindow::handleStateAdded(const std::string& stateId)
@@ -647,7 +676,17 @@ void MainWindow::runSimulation()
         turingMachine->getStatus() == ExecutionStatus::ERROR) {
         statusBar()->showMessage(tr("Cannot run - machine has halted"), 2000);
         return;
+    }
+
+    // Disable interactive mode during simulation
+    tapeWidget->setInteractiveMode(false);
+    if (tapeControlWidget) {
+        QCheckBox* interactiveModeCheckbox = tapeControlWidget->findChild<QCheckBox*>();
+        if (interactiveModeCheckbox) {
+            interactiveModeCheckbox->setChecked(false);
+            interactiveModeCheckbox->setEnabled(false);
         }
+    }
 
     // Update UI state
     runAction->setEnabled(false);
@@ -661,9 +700,18 @@ void MainWindow::runSimulation()
     statusBar()->showMessage(tr("Simulation running..."));
 }
 
+// Re-enable interactive mode when simulation is paused or reset
 void MainWindow::pauseSimulation()
 {
     simulationTimer->stop();
+
+    // Re-enable interactive mode
+    if (tapeControlWidget) {
+        QCheckBox* interactiveModeCheckbox = tapeControlWidget->findChild<QCheckBox*>();
+        if (interactiveModeCheckbox) {
+            interactiveModeCheckbox->setEnabled(true);
+        }
+    }
 
     runAction->setEnabled(true);
     pauseAction->setEnabled(false);
@@ -673,13 +721,24 @@ void MainWindow::pauseSimulation()
     statusBar()->showMessage(tr("Simulation paused"), 2000);
 }
 
+// Also update the resetSimulation method
 void MainWindow::resetSimulation()
 {
     simulationTimer->stop();
     turingMachine->reset();
     tapeWidget->updateTapeDisplay();
 
-    StatesListWidget* statesWidget = statesDock->widget()->findChild<StatesListWidget*>();
+    // Re-enable interactive mode
+    tapeWidget->setInteractiveMode(true);
+    if (tapeControlWidget) {
+        QCheckBox* interactiveModeCheckbox = tapeControlWidget->findChild<QCheckBox*>();
+        if (interactiveModeCheckbox) {
+            interactiveModeCheckbox->setChecked(true);
+            interactiveModeCheckbox->setEnabled(true);
+        }
+    }
+
+    StatesListWidget* statesWidget = qobject_cast<StatesListWidget*>(statesDock->widget());
     if (statesWidget) {
         statesWidget->highlightCurrentState(turingMachine->getCurrentState());
     }
