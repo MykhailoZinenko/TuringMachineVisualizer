@@ -17,6 +17,83 @@ void StatesListWidget::setMachine(TuringMachine* newMachine)
     refreshStatesList(); // Refresh the list with the new machine
 }
 
+void StatesListWidget::refreshStatesList()
+{
+    // Clear the list first
+    statesList->clear();
+
+    // Ensure we have a valid machine pointer
+    if (!machine) {
+        return;
+    }
+
+    // Get all states and populate the list
+    auto states = machine->getAllStates();
+    for (auto state : states) {
+        QString displayText = QString::fromStdString(state->getId());
+        if (!state->getName().empty()) {
+            displayText += " (" + QString::fromStdString(state->getName()) + ")";
+        }
+
+        QListWidgetItem* item = new QListWidgetItem(displayText, statesList);
+        item->setData(Qt::UserRole, QString::fromStdString(state->getId()));
+
+        // Set icon based on state type
+        switch (state->getType()) {
+            case StateType::START:
+                item->setIcon(QIcon::fromTheme("media-playback-start"));
+                break;
+            case StateType::ACCEPT:
+                item->setIcon(QIcon::fromTheme("dialog-ok"));
+                break;
+            case StateType::REJECT:
+                item->setIcon(QIcon::fromTheme("dialog-cancel"));
+                break;
+            default:
+                // No icon for normal states
+                break;
+        }
+    }
+
+    updateButtons();
+}
+
+void StatesListWidget::addState()
+{
+    // Ensure we have a valid machine pointer
+    if (!machine) {
+        QMessageBox::warning(this, tr("Error"),
+            tr("No machine available. Please create a new machine first."));
+        return;
+    }
+
+    StateDialog dialog(this);
+    if (dialog.exec() == QDialog::Accepted) {
+        std::string stateId = dialog.getStateId().toStdString();
+
+        // Check if state with this ID already exists
+        if (machine->getState(stateId)) {
+            QMessageBox::warning(this, tr("Duplicate State ID"),
+                tr("A state with ID '%1' already exists.").arg(dialog.getStateId()));
+            return;
+        }
+
+        // Add the state to the machine
+        machine->addState(stateId,
+                          dialog.getStateName().toStdString(),
+                          dialog.getStateType());
+
+        // If this is a start state, set it as the machine's start state
+        if (dialog.getStateType() == StateType::START) {
+            machine->setStartState(stateId);
+        }
+
+        // Refresh the list and emit signal
+        refreshStatesList();
+        emit stateAdded(stateId);
+    }
+}
+
 void StatesListWidget::setupUI()
 {
     // Create main layout
@@ -51,70 +128,6 @@ void StatesListWidget::setupUI()
     
     // Initialize button states
     updateButtons();
-}
-
-void StatesListWidget::refreshStatesList()
-{
-    statesList->clear();
-    
-    auto states = machine->getAllStates();
-    for (auto state : states) {
-        QString displayText = QString::fromStdString(state->getId());
-        if (!state->getName().empty()) {
-            displayText += " (" + QString::fromStdString(state->getName()) + ")";
-        }
-        
-        QListWidgetItem* item = new QListWidgetItem(displayText, statesList);
-        item->setData(Qt::UserRole, QString::fromStdString(state->getId()));
-        
-        // Set icon based on state type
-        QIcon icon;
-        switch (state->getType()) {
-            case StateType::START:
-                item->setIcon(QIcon::fromTheme("media-playback-start"));
-                break;
-            case StateType::ACCEPT:
-                item->setIcon(QIcon::fromTheme("dialog-ok"));
-                break;
-            case StateType::REJECT:
-                item->setIcon(QIcon::fromTheme("dialog-cancel"));
-                break;
-            default:
-                // No icon for normal states
-                break;
-        }
-    }
-    
-    updateButtons();
-}
-
-void StatesListWidget::addState()
-{
-    StateDialog dialog(this);
-    if (dialog.exec() == QDialog::Accepted) {
-        std::string stateId = dialog.getStateId().toStdString();
-        
-        // Check if state with this ID already exists
-        if (machine->getState(stateId)) {
-            QMessageBox::warning(this, tr("Duplicate State ID"),
-                tr("A state with ID '%1' already exists.").arg(dialog.getStateId()));
-            return;
-        }
-        
-        // Add the state to the machine
-        machine->addState(stateId, 
-                          dialog.getStateName().toStdString(), 
-                          dialog.getStateType());
-        
-        // If this is a start state, set it as the machine's start state
-        if (dialog.getStateType() == StateType::START) {
-            machine->setStartState(stateId);
-        }
-        
-        // Refresh the list and emit signal
-        refreshStatesList();
-        emit stateAdded(stateId);
-    }
 }
 
 void StatesListWidget::editState()

@@ -1,7 +1,13 @@
 #include "TuringMachine.h"
 #include <algorithm>
 #include <nlohmann/json.hpp>
+#include <QtCore/qstring.h>
+#include <qdebug.h>
+#ifndef JSON_INCLUDED
+#define JSON_INCLUDED
+#include <nlohmann/json.hpp>
 using json = nlohmann::json;
+#endif
 
 TuringMachine::TuringMachine(const std::string& name, MachineType type)
     : name(name), type(type), status(ExecutionStatus::READY), 
@@ -334,6 +340,7 @@ void TuringMachine::setMaxHistorySize(int size)
     }
 }
 
+// Modify TuringMachine::toJson() to include debug output
 std::string TuringMachine::toJson() const
 {
     json j;
@@ -368,44 +375,100 @@ std::string TuringMachine::toJson() const
     }
     j["transitions"] = transitionsJson;
 
+    // Debug output
+    qDebug() << "Saving machine with:"
+             << states.size() << "states and"
+             << transitions.size() << "transitions";
+
     return j.dump(4); // Pretty print with 4-space indentation
 }
 
+// Modify TuringMachine::fromJson() to include debug output
 std::unique_ptr<TuringMachine> TuringMachine::fromJson(const std::string& jsonStr)
 {
-    json j = json::parse(jsonStr);
+    qDebug() << "Parsing JSON string of length:" << jsonStr.length();
 
-    // Create machine with name and type using unique_ptr
-    auto machine = std::make_unique<TuringMachine>(j.value("name", "Untitled"),
-                                                  static_cast<MachineType>(j.value("type", 0)));
+    try {
+        json j = json::parse(jsonStr);
 
-    // Restore states
-    for (const auto& stateJson : j["states"]) {
-        StateType type = static_cast<StateType>(stateJson["type"].get<int>());
-        machine->addState(stateJson["id"], stateJson["name"], type);
-        State* state = machine->getState(stateJson["id"]);
-        if (state) {
-            state->setPosition(QPointF(stateJson["posX"].get<float>(),
-                                      stateJson["posY"].get<float>()));
+        // Create machine with name and type using unique_ptr
+        auto machine = std::make_unique<TuringMachine>(j.value("name", "Untitled"),
+                                                      static_cast<MachineType>(j.value("type", 0)));
+
+        // Check if states array exists
+        if (j.contains("states") && j["states"].is_array()) {
+            qDebug() << "Found states array with" << j["states"].size() << "states";
+
+            // Restore states
+            for (const auto& stateJson : j["states"]) {
+                try {
+                    std::string id = stateJson["id"];
+                    std::string name = stateJson["name"];
+                    StateType type = static_cast<StateType>(stateJson["type"].get<int>());
+
+                    qDebug() << "Adding state:" << QString::fromStdString(id);
+                    machine->addState(id, name, type);
+
+                    State* state = machine->getState(id);
+                    if (state) {
+                        state->setPosition(QPointF(stateJson["posX"].get<float>(),
+                                                  stateJson["posY"].get<float>()));
+                    }
+                } catch (const std::exception& e) {
+                    qWarning() << "Error restoring state:" << e.what();
+                }
+            }
+        } else {
+            qWarning() << "No states array found in JSON";
         }
+
+        // Check if transitions array exists
+        if (j.contains("transitions") && j["transitions"].is_array()) {
+            qDebug() << "Found transitions array with" << j["transitions"].size() << "transitions";
+
+            // Restore transitions
+            for (const auto& transJson : j["transitions"]) {
+                try {
+                    std::string fromState = transJson["fromState"];
+                    char readSymbol = transJson["readSymbol"].get<std::string>()[0];
+                    std::string toState = transJson["toState"];
+                    char writeSymbol = transJson["writeSymbol"].get<std::string>()[0];
+                    Direction direction = static_cast<Direction>(transJson["direction"].get<int>());
+
+                    qDebug() << "Adding transition from" << QString::fromStdString(fromState)
+                             << "on" << readSymbol;
+
+                    machine->addTransition(
+                        fromState,
+                        readSymbol,
+                        toState,
+                        writeSymbol,
+                        direction
+                    );
+                } catch (const std::exception& e) {
+                    qWarning() << "Error restoring transition:" << e.what();
+                }
+            }
+        } else {
+            qWarning() << "No transitions array found in JSON";
+        }
+
+        // Set tape content and current state
+        machine->setTapeContent(j.value("tapeContent", ""));
+        machine->currentState = j.value("currentState", machine->getStartState());
+
+        // Debug check
+        qDebug() << "Machine loaded with" << machine->getAllStates().size() << "states and"
+                 << machine->getAllTransitions().size() << "transitions";
+
+        return machine;
+    } catch (const json::exception& e) {
+        qCritical() << "JSON parsing error:" << e.what();
+        throw;
+    } catch (const std::exception& e) {
+        qCritical() << "General error in fromJson:" << e.what();
+        throw;
     }
-
-    // Restore transitions
-    for (const auto& transJson : j["transitions"]) {
-        machine->addTransition(
-            transJson["fromState"],
-            transJson["readSymbol"].get<std::string>()[0],
-            transJson["toState"],
-            transJson["writeSymbol"].get<std::string>()[0],
-            static_cast<Direction>(transJson["direction"].get<int>())
-        );
-    }
-
-    // Set tape content and current state
-    machine->setTapeContent(j.value("tapeContent", ""));
-    machine->currentState = j.value("currentState", machine->getStartState());
-
-    return machine; // Return the unique_ptr directly (no std::move needed)
 }
 
 ExecutionSnapshot TuringMachine::createSnapshot() const

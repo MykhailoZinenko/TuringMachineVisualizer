@@ -17,6 +17,110 @@ void TransitionsListWidget::setMachine(TuringMachine* newMachine)
     refreshTransitionsList(); // Refresh the list with the new machine
 }
 
+void TransitionsListWidget::refreshTransitionsList()
+{
+    transitionsTable->clearContents();
+
+    // Ensure we have a valid machine pointer
+    if (!machine) {
+        transitionsTable->setRowCount(0);
+        updateButtons();
+        return;
+    }
+
+    auto transitions = machine->getAllTransitions();
+    transitionsTable->setRowCount(transitions.size());
+
+    for (size_t i = 0; i < transitions.size(); ++i) {
+        Transition* transition = transitions[i];
+
+        // From state
+        transitionsTable->setItem(i, 0, new QTableWidgetItem(
+            QString::fromStdString(transition->getFromState())));
+
+        // Read symbol
+        transitionsTable->setItem(i, 1, new QTableWidgetItem(
+            QString(transition->getReadSymbol())));
+
+        // To state
+        transitionsTable->setItem(i, 2, new QTableWidgetItem(
+            QString::fromStdString(transition->getToState())));
+
+        // Write symbol
+        transitionsTable->setItem(i, 3, new QTableWidgetItem(
+            QString(transition->getWriteSymbol())));
+
+        // Direction
+        QString dirText;
+        switch (transition->getDirection()) {
+            case Direction::LEFT:
+                dirText = tr("Left");
+                break;
+            case Direction::RIGHT:
+                dirText = tr("Right");
+                break;
+            case Direction::STAY:
+                dirText = tr("Stay");
+                break;
+        }
+        transitionsTable->setItem(i, 4, new QTableWidgetItem(dirText));
+
+        // Store transition information in item data
+        for (int col = 0; col < 5; ++col) {
+            transitionsTable->item(i, col)->setData(Qt::UserRole,
+                QStringList() << QString::fromStdString(transition->getFromState())
+                             << QString(transition->getReadSymbol()));
+        }
+    }
+
+    updateButtons();
+}
+
+void TransitionsListWidget::addTransition()
+{
+    // Ensure we have a valid machine pointer
+    if (!machine) {
+        QMessageBox::warning(this, tr("Error"),
+            tr("No machine available. Please create a new machine first."));
+        return;
+    }
+
+    // Make sure we have at least one state
+    if (machine->getAllStates().empty()) {
+        QMessageBox::warning(this, tr("No States"),
+            tr("You need to create at least one state before adding transitions."));
+        return;
+    }
+
+    TransitionDialog dialog(machine, this);
+    if (dialog.exec() == QDialog::Accepted) {
+        std::string fromState = dialog.getFromState().toStdString();
+        char readSymbol = dialog.getReadSymbol().toLatin1();
+
+        // Check if a transition for this state and symbol already exists
+        if (machine->getTransition(fromState, readSymbol)) {
+            QMessageBox::warning(this, tr("Duplicate Transition"),
+                tr("A transition for state '%1' and symbol '%2' already exists.")
+                  .arg(dialog.getFromState())
+                  .arg(dialog.getReadSymbol()));
+            return;
+        }
+
+        // Add the transition to the machine
+        machine->addTransition(
+            fromState,
+            readSymbol,
+            dialog.getToState().toStdString(),
+            dialog.getWriteSymbol().toLatin1(),
+            dialog.getDirection()
+        );
+
+        // Refresh the list and emit signal
+        refreshTransitionsList();
+        emit transitionAdded();
+    }
+}
+
 void TransitionsListWidget::setupUI()
 {
     // Create main layout
@@ -63,96 +167,6 @@ void TransitionsListWidget::setupUI()
     
     // Initialize button states
     updateButtons();
-}
-
-void TransitionsListWidget::refreshTransitionsList()
-{
-    transitionsTable->clearContents();
-    
-    auto transitions = machine->getAllTransitions();
-    transitionsTable->setRowCount(transitions.size());
-    
-    for (size_t i = 0; i < transitions.size(); ++i) {
-        Transition* transition = transitions[i];
-        
-        // From state
-        transitionsTable->setItem(i, 0, new QTableWidgetItem(
-            QString::fromStdString(transition->getFromState())));
-        
-        // Read symbol
-        transitionsTable->setItem(i, 1, new QTableWidgetItem(
-            QString(transition->getReadSymbol())));
-        
-        // To state
-        transitionsTable->setItem(i, 2, new QTableWidgetItem(
-            QString::fromStdString(transition->getToState())));
-        
-        // Write symbol
-        transitionsTable->setItem(i, 3, new QTableWidgetItem(
-            QString(transition->getWriteSymbol())));
-        
-        // Direction
-        QString dirText;
-        switch (transition->getDirection()) {
-            case Direction::LEFT:
-                dirText = tr("Left");
-                break;
-            case Direction::RIGHT:
-                dirText = tr("Right");
-                break;
-            case Direction::STAY:
-                dirText = tr("Stay");
-                break;
-        }
-        transitionsTable->setItem(i, 4, new QTableWidgetItem(dirText));
-        
-        // Store transition information in item data
-        for (int col = 0; col < 5; ++col) {
-            transitionsTable->item(i, col)->setData(Qt::UserRole, 
-                QStringList() << QString::fromStdString(transition->getFromState()) 
-                             << QString(transition->getReadSymbol()));
-        }
-    }
-    
-    updateButtons();
-}
-
-void TransitionsListWidget::addTransition()
-{
-    // Make sure we have at least one state
-    if (machine->getAllStates().empty()) {
-        QMessageBox::warning(this, tr("No States"),
-            tr("You need to create at least one state before adding transitions."));
-        return;
-    }
-    
-    TransitionDialog dialog(machine, this);
-    if (dialog.exec() == QDialog::Accepted) {
-        std::string fromState = dialog.getFromState().toStdString();
-        char readSymbol = dialog.getReadSymbol().toLatin1();
-        
-        // Check if a transition for this state and symbol already exists
-        if (machine->getTransition(fromState, readSymbol)) {
-            QMessageBox::warning(this, tr("Duplicate Transition"),
-                tr("A transition for state '%1' and symbol '%2' already exists.")
-                  .arg(dialog.getFromState())
-                  .arg(dialog.getReadSymbol()));
-            return;
-        }
-        
-        // Add the transition to the machine
-        machine->addTransition(
-            fromState,
-            readSymbol,
-            dialog.getToState().toStdString(),
-            dialog.getWriteSymbol().toLatin1(),
-            dialog.getDirection()
-        );
-        
-        // Refresh the list and emit signal
-        refreshTransitionsList();
-        emit transitionAdded();
-    }
 }
 
 void TransitionsListWidget::editTransition()

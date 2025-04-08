@@ -184,31 +184,28 @@ void MainWindow::createDockWindows()
     statesDock = new QDockWidget(tr("States"), this);
     statesDock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
 
-    // Create and add the states list widget
-    StatesListWidget* statesWidget = new StatesListWidget(turingMachine.get(), statesDock);
+    // Create and add the states list widget directly as the dock widget
+    StatesListWidget* statesWidget = new StatesListWidget(turingMachine.get(), this);
     statesDock->setWidget(statesWidget);
-
     addDockWidget(Qt::RightDockWidgetArea, statesDock);
 
     // Transitions dock
     transitionsDock = new QDockWidget(tr("Transitions"), this);
     transitionsDock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
 
-    // Create and add the transitions list widget
-    TransitionsListWidget* transitionsWidget = new TransitionsListWidget(turingMachine.get(), transitionsDock);
+    // Create and add the transitions list widget directly as the dock widget
+    TransitionsListWidget* transitionsWidget = new TransitionsListWidget(turingMachine.get(), this);
     transitionsDock->setWidget(transitionsWidget);
-
     addDockWidget(Qt::RightDockWidgetArea, transitionsDock);
 
     // Properties dock
     propertiesDock = new QDockWidget(tr("Properties"), this);
     propertiesDock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea | Qt::BottomDockWidgetArea);
 
-    QLabel *propertiesLabel = new QLabel(tr("Properties Editor will go here"), propertiesDock);
+    QLabel *propertiesLabel = new QLabel(tr("Properties Editor will go here"), this);
     propertiesLabel->setAlignment(Qt::AlignCenter);
     propertiesLabel->setStyleSheet("background-color: #e0e0e0; border: 1px solid #cccccc;");
     propertiesDock->setWidget(propertiesLabel);
-
     addDockWidget(Qt::BottomDockWidgetArea, propertiesDock);
 
     // Add dock widgets to view menu
@@ -273,38 +270,34 @@ void MainWindow::closeEvent(QCloseEvent *event)
 
 void MainWindow::newMachine()
 {
-    qDebug() << "Creating new machine...";
+    // Create a new Turing Machine
     turingMachine = std::make_unique<TuringMachine>("Untitled");
-    qDebug() << "New TuringMachine created:" << turingMachine.get();
 
+    // Update tape-related widgets
     tapeWidget->setTape(turingMachine->getTape());
-    qDebug() << "Tape set in TapeWidget:" << turingMachine->getTape();
+    tapeControlWidget->setTape(turingMachine->getTape());
+    tapeControlWidget->resetTape();
 
-    qDebug() << "Resetting tape control widget...";
-    tapeControlWidget->setTape(turingMachine->getTape()); // Update the tape pointer
-    tapeControlWidget->resetTape(); // Now safe to reset
-    qDebug() << "Tape control widget reset";
-
-    qDebug() << "Checking statesDock:" << statesDock;
-    StatesListWidget* statesWidget = statesDock->widget()->findChild<StatesListWidget*>();
-    qDebug() << "Found statesWidget:" << statesWidget;
+    // Find and update states widget - more directly without using findChild
+    StatesListWidget* statesWidget = qobject_cast<StatesListWidget*>(statesDock->widget());
     if (statesWidget) {
         statesWidget->setMachine(turingMachine.get());
-        qDebug() << "StatesListWidget updated";
     }
 
-    qDebug() << "Checking transitionsDock:" << transitionsDock;
-    TransitionsListWidget* transitionsWidget = transitionsDock->widget()->findChild<TransitionsListWidget*>();
-    qDebug() << "Found transitionsWidget:" << transitionsWidget;
+    // Find and update transitions widget - more directly without using findChild
+    TransitionsListWidget* transitionsWidget = qobject_cast<TransitionsListWidget*>(transitionsDock->widget());
     if (transitionsWidget) {
         transitionsWidget->setMachine(turingMachine.get());
-        qDebug() << "TransitionsListWidget updated";
     }
 
+    // Reset UI state
     runAction->setEnabled(true);
     pauseAction->setEnabled(false);
     stepForwardAction->setEnabled(true);
     stepBackwardAction->setEnabled(false);
+
+    // Reset the current file name
+    currentFileName.clear();
 
     statusBar()->showMessage(tr("Created new machine"), 2000);
 }
@@ -328,37 +321,60 @@ void MainWindow::openMachine()
     file.close();
 
     try {
-        turingMachine = TuringMachine::fromJson(jsonStr);
+        // Create new machine from JSON
+        auto loadedMachine = TuringMachine::fromJson(jsonStr);
+        if (!loadedMachine) {
+            throw std::runtime_error("Failed to create machine from file");
+        }
 
+        // Replace current machine with loaded one
+        turingMachine = std::move(loadedMachine);
+
+        // Set current file name
+        currentFileName = fileName;
+
+        // Update tape-related widgets
         tapeWidget->setTape(turingMachine->getTape());
-        tapeControlWidget->setTape(turingMachine->getTape()); // Update the tape pointer
+        tapeControlWidget->setTape(turingMachine->getTape());
         tapeControlWidget->resetTape();
 
-        StatesListWidget* statesWidget = statesDock->widget()->findChild<StatesListWidget*>();
+        // Find and update states widget - directly cast the widget
+        StatesListWidget* statesWidget = qobject_cast<StatesListWidget*>(statesDock->widget());
         if (statesWidget) {
             statesWidget->setMachine(turingMachine.get());
         }
 
-        TransitionsListWidget* transitionsWidget = transitionsDock->widget()->findChild<TransitionsListWidget*>();
+        // Find and update transitions widget - directly cast the widget
+        TransitionsListWidget* transitionsWidget = qobject_cast<TransitionsListWidget*>(transitionsDock->widget());
         if (transitionsWidget) {
             transitionsWidget->setMachine(turingMachine.get());
         }
 
+        // Update UI state
+        runAction->setEnabled(true);
+        pauseAction->setEnabled(false);
+        stepForwardAction->setEnabled(true);
+        stepBackwardAction->setEnabled(turingMachine->canStepBackward());
+
         statusBar()->showMessage(tr("Opened %1").arg(fileName), 2000);
     } catch (const std::exception& e) {
         QMessageBox::warning(this, tr("Error"), tr("Invalid file format: %1").arg(e.what()));
-        turingMachine = std::make_unique<TuringMachine>("Untitled");
 
+        // Create a new machine in case of error
+        turingMachine = std::make_unique<TuringMachine>("Untitled");
+        currentFileName.clear();
+
+        // Update UI with the new empty machine
         tapeWidget->setTape(turingMachine->getTape());
-        tapeControlWidget->setTape(turingMachine->getTape()); // Update in fallback case
+        tapeControlWidget->setTape(turingMachine->getTape());
         tapeControlWidget->resetTape();
 
-        StatesListWidget* statesWidget = statesDock->widget()->findChild<StatesListWidget*>();
+        StatesListWidget* statesWidget = qobject_cast<StatesListWidget*>(statesDock->widget());
         if (statesWidget) {
             statesWidget->setMachine(turingMachine.get());
         }
 
-        TransitionsListWidget* transitionsWidget = transitionsDock->widget()->findChild<TransitionsListWidget*>();
+        TransitionsListWidget* transitionsWidget = qobject_cast<TransitionsListWidget*>(transitionsDock->widget());
         if (transitionsWidget) {
             transitionsWidget->setMachine(turingMachine.get());
         }
