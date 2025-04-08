@@ -15,7 +15,7 @@
 #include <QGuiApplication>
 
 MainWindow::MainWindow(QWidget *parent)
-    : QMainWindow(parent)
+    : QMainWindow(parent), isDirty(false)
 {
     // Create the Turing Machine model
     turingMachine = std::make_unique<TuringMachine>("Untitled");
@@ -35,7 +35,33 @@ MainWindow::MainWindow(QWidget *parent)
     // Read settings
     readSettings();
 
+    // Initialize window title
+    updateWindowTitle();
+
     statusBar()->showMessage(tr("Ready"));
+}
+
+void MainWindow::setDirty(bool dirty)
+{
+    if (isDirty != dirty) {
+        isDirty = dirty;
+        updateWindowTitle();
+        saveAction->setEnabled(isDirty);
+    }
+}
+
+void MainWindow::updateWindowTitle()
+{
+    QString title = turingMachine->getName().c_str();
+    if (title.isEmpty()) {
+        title = "Untitled";
+    }
+
+    if (isDirty) {
+        title += " *";
+    }
+
+    setWindowTitle(title + " - Turing Machine Visualizer");
 }
 
 MainWindow::~MainWindow()
@@ -176,6 +202,44 @@ void MainWindow::setupCentralWidget()
     layout->addWidget(tapeControlWidget);
 
     tapeWidget->setTape(turingMachine->getTape());
+
+    // Connect tape content changes
+    connect(tapeControlWidget, &TapeControlWidget::tapeContentChanged, this, &MainWindow::handleTapeContentChanged);
+}
+
+void MainWindow::handleStateAdded(const std::string& stateId)
+{
+    setDirty();
+}
+
+void MainWindow::handleStateEdited(const std::string& stateId)
+{
+    setDirty();
+}
+
+void MainWindow::handleStateRemoved(const std::string& stateId)
+{
+    setDirty();
+}
+
+void MainWindow::handleTransitionAdded()
+{
+    setDirty();
+}
+
+void MainWindow::handleTransitionEdited()
+{
+    setDirty();
+}
+
+void MainWindow::handleTransitionRemoved()
+{
+    setDirty();
+}
+
+void MainWindow::handleTapeContentChanged()
+{
+    setDirty();
 }
 
 void MainWindow::createDockWindows()
@@ -217,6 +281,15 @@ void MainWindow::createDockWindows()
     connect(statesWidget, &StatesListWidget::stateAdded, transitionsWidget, &TransitionsListWidget::refreshTransitionsList);
     connect(statesWidget, &StatesListWidget::stateEdited, transitionsWidget, &TransitionsListWidget::refreshTransitionsList);
     connect(statesWidget, &StatesListWidget::stateRemoved, transitionsWidget, &TransitionsListWidget::refreshTransitionsList);
+
+    // Connect signals for dirty flag
+    connect(statesWidget, &StatesListWidget::stateAdded, this, &MainWindow::handleStateAdded);
+    connect(statesWidget, &StatesListWidget::stateEdited, this, &MainWindow::handleStateEdited);
+    connect(statesWidget, &StatesListWidget::stateRemoved, this, &MainWindow::handleStateRemoved);
+
+    connect(transitionsWidget, &TransitionsListWidget::transitionAdded, this, &MainWindow::handleTransitionAdded);
+    connect(transitionsWidget, &TransitionsListWidget::transitionEdited, this, &MainWindow::handleTransitionEdited);
+    connect(transitionsWidget, &TransitionsListWidget::transitionRemoved, this, &MainWindow::handleTransitionRemoved);
 }
 
 void MainWindow::readSettings()
@@ -244,10 +317,7 @@ void MainWindow::writeSettings()
 
 void MainWindow::closeEvent(QCloseEvent *event)
 {
-    // TODO: Replace with proper dirty flag tracking
-    bool hasUnsavedChanges = (turingMachine->getStepCount() > 0); // Simple check for now
-
-    if (hasUnsavedChanges) {
+    if (isDirty) {
         QMessageBox::StandardButton reply = QMessageBox::question(
             this, tr("Unsaved Changes"),
             tr("You have unsaved changes. Do you want to save before closing?"),
@@ -255,8 +325,10 @@ void MainWindow::closeEvent(QCloseEvent *event)
 
         if (reply == QMessageBox::Save) {
             saveMachine();
-            if (turingMachine->getName() == "Untitled") { // If still untitled, trigger Save As
-                saveAsOperation();
+            if (isDirty) {
+                // User canceled save operation
+                event->ignore();
+                return;
             }
         } else if (reply == QMessageBox::Cancel) {
             event->ignore();
@@ -270,6 +342,24 @@ void MainWindow::closeEvent(QCloseEvent *event)
 
 void MainWindow::newMachine()
 {
+    // Check for unsaved changes
+    if (isDirty) {
+        QMessageBox::StandardButton reply = QMessageBox::question(
+            this, tr("Unsaved Changes"),
+            tr("You have unsaved changes. Do you want to save before creating a new machine?"),
+            QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel);
+
+        if (reply == QMessageBox::Save) {
+            saveMachine();
+            if (isDirty) {
+                // If still dirty, user canceled save operation
+                return;
+            }
+        } else if (reply == QMessageBox::Cancel) {
+            return;
+        }
+    }
+
     // Create a new Turing Machine
     turingMachine = std::make_unique<TuringMachine>("Untitled");
 
@@ -278,13 +368,13 @@ void MainWindow::newMachine()
     tapeControlWidget->setTape(turingMachine->getTape());
     tapeControlWidget->resetTape();
 
-    // Find and update states widget - more directly without using findChild
+    // Find and update states widget
     StatesListWidget* statesWidget = qobject_cast<StatesListWidget*>(statesDock->widget());
     if (statesWidget) {
         statesWidget->setMachine(turingMachine.get());
     }
 
-    // Find and update transitions widget - more directly without using findChild
+    // Find and update transitions widget
     TransitionsListWidget* transitionsWidget = qobject_cast<TransitionsListWidget*>(transitionsDock->widget());
     if (transitionsWidget) {
         transitionsWidget->setMachine(turingMachine.get());
@@ -299,11 +389,32 @@ void MainWindow::newMachine()
     // Reset the current file name
     currentFileName.clear();
 
+    // Clear dirty flag
+    setDirty(false);
+
     statusBar()->showMessage(tr("Created new machine"), 2000);
 }
 
 void MainWindow::openMachine()
 {
+    // Check for unsaved changes
+    if (isDirty) {
+        QMessageBox::StandardButton reply = QMessageBox::question(
+            this, tr("Unsaved Changes"),
+            tr("You have unsaved changes. Do you want to save before opening another machine?"),
+            QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel);
+
+        if (reply == QMessageBox::Save) {
+            saveMachine();
+            if (isDirty) {
+                // If still dirty, user canceled save operation
+                return;
+            }
+        } else if (reply == QMessageBox::Cancel) {
+            return;
+        }
+    }
+
     QString fileName = QFileDialog::getOpenFileName(this,
         tr("Open Turing Machine"), "",
         tr("Turing Machine Files (*.tm);;All Files (*)"));
@@ -338,13 +449,13 @@ void MainWindow::openMachine()
         tapeControlWidget->setTape(turingMachine->getTape());
         tapeControlWidget->resetTape();
 
-        // Find and update states widget - directly cast the widget
+        // Find and update states widget
         StatesListWidget* statesWidget = qobject_cast<StatesListWidget*>(statesDock->widget());
         if (statesWidget) {
             statesWidget->setMachine(turingMachine.get());
         }
 
-        // Find and update transitions widget - directly cast the widget
+        // Find and update transitions widget
         TransitionsListWidget* transitionsWidget = qobject_cast<TransitionsListWidget*>(transitionsDock->widget());
         if (transitionsWidget) {
             transitionsWidget->setMachine(turingMachine.get());
@@ -355,6 +466,9 @@ void MainWindow::openMachine()
         pauseAction->setEnabled(false);
         stepForwardAction->setEnabled(true);
         stepBackwardAction->setEnabled(turingMachine->canStepBackward());
+
+        // Clear dirty flag
+        setDirty(false);
 
         statusBar()->showMessage(tr("Opened %1").arg(fileName), 2000);
     } catch (const std::exception& e) {
@@ -378,9 +492,13 @@ void MainWindow::openMachine()
         if (transitionsWidget) {
             transitionsWidget->setMachine(turingMachine.get());
         }
+
+        // Clear dirty flag
+        setDirty(false);
     }
 }
 
+// Update the save methods to clear dirty flag
 void MainWindow::saveMachine()
 {
     if (currentFileName.isEmpty()) {
@@ -394,9 +512,17 @@ void MainWindow::saveMachine()
         return;
     }
 
+    // Get JSON representation of the machine
+    std::string jsonStr = turingMachine->toJson();
+    qDebug() << "JSON to save:" << QString::fromStdString(jsonStr);
+
+    // Write to file
     QTextStream out(&file);
-    out << QString::fromStdString(turingMachine->toJson());
+    out << QString::fromStdString(jsonStr);
     file.close();
+
+    // Clear dirty flag
+    setDirty(false);
 
     statusBar()->showMessage(tr("Machine saved to %1").arg(currentFileName), 2000);
 }
@@ -409,17 +535,31 @@ void MainWindow::saveAsOperation()
 
     if (fileName.isEmpty()) return;
 
+    // Add .tm extension if needed
+    if (!fileName.endsWith(".tm", Qt::CaseInsensitive)) {
+        fileName += ".tm";
+    }
+
     QFile file(fileName);
     if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
         QMessageBox::warning(this, tr("Error"), tr("Could not save file."));
         return;
     }
 
+    // Get JSON representation of the machine
+    std::string jsonStr = turingMachine->toJson();
+    qDebug() << "JSON to save:" << QString::fromStdString(jsonStr);
+
+    // Write to file
     QTextStream out(&file);
-    out << QString::fromStdString(turingMachine->toJson());
+    out << QString::fromStdString(jsonStr);
     file.close();
 
     currentFileName = fileName;
+
+    // Clear dirty flag
+    setDirty(false);
+
     statusBar()->showMessage(tr("Saved as %1").arg(fileName), 2000);
 }
 
@@ -493,6 +633,9 @@ void MainWindow::stepForward()
     int oldHeadPosition = turingMachine->getTape()->getHeadPosition();
 
     if (turingMachine->step()) {
+        // Mark as dirty if the machine was modified
+        setDirty();
+
         int newHeadPosition = turingMachine->getTape()->getHeadPosition();
         if (newHeadPosition > oldHeadPosition) {
             tapeWidget->animateHeadMovement(true);
@@ -502,7 +645,7 @@ void MainWindow::stepForward()
             tapeWidget->updateTapeDisplay();
         }
 
-        StatesListWidget* statesWidget = statesDock->widget()->findChild<StatesListWidget*>();
+        StatesListWidget* statesWidget = qobject_cast<StatesListWidget*>(statesDock->widget());
         if (statesWidget) {
             statesWidget->highlightCurrentState(turingMachine->getCurrentState());
         }
@@ -534,7 +677,7 @@ void MainWindow::stepForward()
                     .arg(turingMachine->getStepCount());
         }
 
-        StatesListWidget* statesWidget = statesDock->widget()->findChild<StatesListWidget*>();
+        StatesListWidget* statesWidget = qobject_cast<StatesListWidget*>(statesDock->widget());
         if (statesWidget) {
             statesWidget->highlightCurrentState(turingMachine->getCurrentState());
         }

@@ -43,6 +43,16 @@ private slots:
     void showAboutDialog();
     void showHelpContents();
 
+    // Changes tracking
+    void setDirty(bool dirty = true);
+    void handleStateAdded(const std::string& stateId);
+    void handleStateEdited(const std::string& stateId);
+    void handleStateRemoved(const std::string& stateId);
+    void handleTransitionAdded();
+    void handleTransitionEdited();
+    void handleTransitionRemoved();
+    void handleTapeContentChanged();
+
 private:
     // Data model
     std::unique_ptr<TuringMachine> turingMachine;
@@ -103,6 +113,10 @@ private:
     QDockWidget *propertiesDock;
 
     QString currentFileName;
+
+    // Tracking unsaved changes
+    bool isDirty;
+    void updateWindowTitle();
 };
 
 #endif // MAINWINDOW_H
