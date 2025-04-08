@@ -167,6 +167,9 @@ void TransitionsListWidget::setupUI()
     
     // Initialize button states
     updateButtons();
+
+    connect(transitionsTable->selectionModel(), &QItemSelectionModel::selectionChanged,
+        this, &TransitionsListWidget::onTransitionSelectionChanged);
 }
 
 void TransitionsListWidget::editTransition()
@@ -249,4 +252,22 @@ Transition* TransitionsListWidget::getSelectedTransition()
     char readSymbol = data[1].isEmpty() ? '_' : data[1].at(0).toLatin1();
     
     return machine->getTransition(fromState, readSymbol);
+}
+
+void TransitionsListWidget::onTransitionSelectionChanged()
+{
+    QModelIndexList selection = transitionsTable->selectionModel()->selectedRows();
+    if (selection.isEmpty()) return;
+
+    int row = selection.first().row();
+    QTableWidgetItem* item = transitionsTable->item(row, 0);
+    if (!item) return;
+
+    QStringList data = item->data(Qt::UserRole).toStringList();
+    if (data.size() < 2) return;
+
+    std::string fromState = data[0].toStdString();
+    char readSymbol = data[1].isEmpty() ? '_' : data[1].at(0).toLatin1();
+
+    emit transitionSelected(fromState, readSymbol);
 }

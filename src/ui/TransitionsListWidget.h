@@ -20,6 +20,7 @@ public:
         void transitionAdded();
     void transitionEdited();
     void transitionRemoved();
+    void transitionSelected(const std::string& fromState, char readSymbol); // New signal for transition selection
 
     private slots:
         void addTransition();
@@ -27,6 +28,7 @@ public:
     void removeTransition();
     void updateButtons();
     void handleCellDoubleClick(int row, int column);
+    void onTransitionSelectionChanged(); // New slot for handling selection changes
 
 private:
     TuringMachine* machine;

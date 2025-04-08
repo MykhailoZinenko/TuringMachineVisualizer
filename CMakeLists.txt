@@ -28,6 +28,7 @@ set(SOURCES
         src/model/Transition.cpp
         src/model/TuringMachine.cpp
         src/ui/PreferencesDialog.cpp
+        src/ui/PropertiesEditorWidget.cpp
 )
 
 # Set header files
@@ -44,6 +45,7 @@ set(HEADERS
         src/model/Transition.h
         src/model/TuringMachine.h
         src/ui/PreferencesDialog.h
+        src/ui/PropertiesEditorWidget.h
 )
 
 # Include directories

@@ -21,12 +21,14 @@ public:
         void stateAdded(const std::string& stateId);
     void stateEdited(const std::string& stateId);
     void stateRemoved(const std::string& stateId);
+    void stateSelected(const std::string& stateId); // New signal for state selection
 
     private slots:
         void addState();
     void editState();
     void removeState();
     void updateButtons();
+    void onStateSelectionChanged(); // New slot for handling selection changes
 
 private:
     TuringMachine* machine;

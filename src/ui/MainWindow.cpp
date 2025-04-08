@@ -266,10 +266,9 @@ void MainWindow::createDockWindows()
     propertiesDock = new QDockWidget(tr("Properties"), this);
     propertiesDock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea | Qt::BottomDockWidgetArea);
 
-    QLabel *propertiesLabel = new QLabel(tr("Properties Editor will go here"), this);
-    propertiesLabel->setAlignment(Qt::AlignCenter);
-    propertiesLabel->setStyleSheet("background-color: #e0e0e0; border: 1px solid #cccccc;");
-    propertiesDock->setWidget(propertiesLabel);
+    // Create properties editor widget
+    propertiesEditor = new PropertiesEditorWidget(turingMachine.get(), this);
+    propertiesDock->setWidget(propertiesEditor);
     addDockWidget(Qt::BottomDockWidgetArea, propertiesDock);
 
     // Add dock widgets to view menu
@@ -277,7 +276,7 @@ void MainWindow::createDockWindows()
     viewMenu->addAction(transitionsDock->toggleViewAction());
     viewMenu->addAction(propertiesDock->toggleViewAction());
 
-    // Connect signals
+    // Connect signals for lists updating
     connect(statesWidget, &StatesListWidget::stateAdded, transitionsWidget, &TransitionsListWidget::refreshTransitionsList);
     connect(statesWidget, &StatesListWidget::stateEdited, transitionsWidget, &TransitionsListWidget::refreshTransitionsList);
     connect(statesWidget, &StatesListWidget::stateRemoved, transitionsWidget, &TransitionsListWidget::refreshTransitionsList);
@@ -290,6 +289,63 @@ void MainWindow::createDockWindows()
     connect(transitionsWidget, &TransitionsListWidget::transitionAdded, this, &MainWindow::handleTransitionAdded);
     connect(transitionsWidget, &TransitionsListWidget::transitionEdited, this, &MainWindow::handleTransitionEdited);
     connect(transitionsWidget, &TransitionsListWidget::transitionRemoved, this, &MainWindow::handleTransitionRemoved);
+
+    // Connect selection signals for property editor
+    connect(statesWidget, &StatesListWidget::stateSelected, this, &MainWindow::onStateSelected);
+    connect(transitionsWidget, &TransitionsListWidget::transitionSelected, this, &MainWindow::onTransitionSelected);
+
+    // Connect property change signals
+    connect(propertiesEditor, &PropertiesEditorWidget::machinePropertiesChanged, this, &MainWindow::onMachinePropertiesChanged);
+    connect(propertiesEditor, &PropertiesEditorWidget::statePropertiesChanged, this, &MainWindow::onStatePropertiesChanged);
+    connect(propertiesEditor, &PropertiesEditorWidget::transitionPropertiesChanged, this, &MainWindow::onTransitionPropertiesChanged);
+}
+
+void MainWindow::onStateSelected(const std::string& stateId)
+{
+    if (propertiesEditor) {
+        propertiesEditor->selectState(stateId);
+    }
+}
+
+void MainWindow::onTransitionSelected(const std::string& fromState, char readSymbol)
+{
+    if (propertiesEditor) {
+        propertiesEditor->selectTransition(fromState, readSymbol);
+    }
+}
+
+void MainWindow::onMachinePropertiesChanged()
+{
+    // Update window title based on machine name
+    updateWindowTitle();
+
+    // Mark as dirty
+    setDirty();
+}
+
+void MainWindow::onStatePropertiesChanged(const std::string& stateId)
+{
+    // Refresh state list widget
+    StatesListWidget* statesWidget = qobject_cast<StatesListWidget*>(statesDock->widget());
+    if (statesWidget) {
+        statesWidget->refreshStatesList();
+        statesWidget->highlightCurrentState(turingMachine->getCurrentState());
+    }
+
+    // Mark as dirty
+    setDirty();
+}
+
+void MainWindow::onTransitionPropertiesChanged(const std::string& fromState, char readSymbol)
+{
+    // Refresh transition list widget
+    TransitionsListWidget* transitionsWidget = qobject_cast<TransitionsListWidget*>(transitionsDock->widget());
+    if (transitionsWidget) {
+        transitionsWidget->refreshTransitionsList();
+    }
+
+    // Mark as dirty
+    setDirty();
 }
 
 void MainWindow::readSettings()
@@ -380,6 +436,10 @@ void MainWindow::newMachine()
         transitionsWidget->setMachine(turingMachine.get());
     }
 
+    if (propertiesEditor) {
+        propertiesEditor->setMachine(turingMachine.get());
+    }
+
     // Reset UI state
     runAction->setEnabled(true);
     pauseAction->setEnabled(false);
@@ -459,6 +519,10 @@ void MainWindow::openMachine()
         TransitionsListWidget* transitionsWidget = qobject_cast<TransitionsListWidget*>(transitionsDock->widget());
         if (transitionsWidget) {
             transitionsWidget->setMachine(turingMachine.get());
+        }
+
+        if (propertiesEditor) {
+            propertiesEditor->setMachine(turingMachine.get());
         }
 
         // Update UI state

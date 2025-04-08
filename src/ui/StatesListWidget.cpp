@@ -122,12 +122,14 @@ void StatesListWidget::setupUI()
     removeButton = new QPushButton(tr("Remove"), this);
     connect(removeButton, &QPushButton::clicked, this, &StatesListWidget::removeState);
     buttonsLayout->addWidget(removeButton);
-    
+
     // Add buttons layout to main layout
     mainLayout->addLayout(buttonsLayout);
     
     // Initialize button states
     updateButtons();
+
+    connect(statesList, &QListWidget::itemSelectionChanged, this, &StatesListWidget::onStateSelectionChanged);
 }
 
 void StatesListWidget::editState()
@@ -205,5 +207,14 @@ void StatesListWidget::highlightCurrentState(const std::string& currentStateId)
         } else {
             item->setBackground(Qt::transparent);
         }
+    }
+}
+
+void StatesListWidget::onStateSelectionChanged()
+{
+    QListWidgetItem* item = statesList->currentItem();
+    if (item) {
+        std::string stateId = item->data(Qt::UserRole).toString().toStdString();
+        emit stateSelected(stateId);
     }
 }

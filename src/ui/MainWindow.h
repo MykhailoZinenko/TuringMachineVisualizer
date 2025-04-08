@@ -13,6 +13,7 @@
 #include "ui/TapeWidget.h"
 #include "ui/TapeControlWidget.h"
 #include "ui/PreferencesDialog.h"
+#include "ui/PropertiesEditorWidget.h"
 
 class MainWindow : public QMainWindow
 {
@@ -53,6 +54,12 @@ private slots:
     void handleTransitionRemoved();
     void handleTapeContentChanged();
 
+    void onStateSelected(const std::string& stateId);
+    void onTransitionSelected(const std::string& fromState, char readSymbol);
+    void onMachinePropertiesChanged();
+    void onStatePropertiesChanged(const std::string& stateId);
+    void onTransitionPropertiesChanged(const std::string& fromState, char readSymbol);
+
 private:
     // Data model
     std::unique_ptr<TuringMachine> turingMachine;
@@ -60,6 +67,8 @@ private:
     // UI Components
     TapeWidget* tapeWidget;
     TapeControlWidget* tapeControlWidget;
+    PropertiesEditorWidget* propertiesEditor;
+
     // Setup methods
     void createActions();
     void createMenus();
