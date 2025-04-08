@@ -44,7 +44,37 @@ void TapeWidget::setTape(Tape* tape)
 void TapeWidget::updateTapeDisplay()
 {
     if (m_tape) {
+        ensureHeadVisible();
         update(); // Request a repaint
+    }
+}
+
+// Add a new method to check and ensure the head is visible
+void TapeWidget::ensureHeadVisible()
+{
+    if (!m_tape) return;
+
+    int headPosition = m_tape->getHeadPosition();
+
+    // Check if the head is outside the visible range
+    if (headPosition < m_leftmostCell || headPosition >= m_leftmostCell + m_visibleCells) {
+        // Head is outside visible range, adjust view
+        // We center it to provide context on both sides
+        centerHeadPosition();
+    }
+}
+
+// Modify the setHeadAnimation method to better handle head visibility after animation
+void TapeWidget::setHeadAnimation(qreal value)
+{
+    m_headAnimation = value;
+    update(); // Request repaint when animation value changes
+
+    // When animation completes, ensure cell is visible
+    if (value >= 0.99) {
+        m_headAnimation = 0.0;
+        m_headAnimOffset = 0;
+        ensureHeadVisible(); // Use our new method
     }
 }
 
@@ -59,23 +89,14 @@ void TapeWidget::animateHeadMovement(bool moveRight)
     }
 }
 
-void TapeWidget::setHeadAnimation(qreal value)
-{
-    m_headAnimation = value;
-    update(); // Request repaint when animation value changes
-    
-    // When animation completes, ensure cell is visible
-    if (value >= 0.99) {
-        m_headAnimation = 0.0;
-        m_headAnimOffset = 0;
-        ensureCellVisible(m_tape->getHeadPosition());
-    }
-}
-
 void TapeWidget::onStepExecuted()
 {
-    // This will be called after a step is executed
-    centerHeadPosition();
+    if (!m_tape) return;
+
+    // Instead of always centering (which can be disorienting),
+    // only move the view if the head would be outside the visible range
+    ensureHeadVisible();
+
     updateTapeDisplay();
 }
 
@@ -182,6 +203,20 @@ void TapeWidget::wheelEvent(QWheelEvent *event)
         } else {
             m_leftmostCell++;
         }
+
+        // After manual scrolling, ensure head remains visible if it was visible before
+        if (m_tape) {
+            int headPosition = m_tape->getHeadPosition();
+            // Only enforce visibility if the head was already visible
+            // This allows the user to explore the tape without the view jumping back
+            bool wasHeadVisible = (headPosition >= m_leftmostCell &&
+                                  headPosition < m_leftmostCell + m_visibleCells);
+
+            if (wasHeadVisible) {
+                ensureHeadVisible();
+            }
+        }
+
         updateTapeDisplay();
     }
     

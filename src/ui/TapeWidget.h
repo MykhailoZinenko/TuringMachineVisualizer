@@ -53,6 +53,7 @@ private:
     QRect getCellRect(int cellIndex) const; // Get rectangle for a cell
     void centerHeadPosition(); // Center the head in the view
     void ensureCellVisible(int cellIndex); // Make sure a cell is visible
+    void ensureHeadVisible(); // Ensure the head is in view
     void updateCellSize(); // Recalculate cell size based on widget size
     
     // Drawing helpers

@@ -642,7 +642,7 @@ void MainWindow::stepForward()
         } else if (newHeadPosition < oldHeadPosition) {
             tapeWidget->animateHeadMovement(false);
         } else {
-            tapeWidget->updateTapeDisplay();
+            tapeWidget->updateTapeDisplay(); // This will now ensure head is visible
         }
 
         StatesListWidget* statesWidget = qobject_cast<StatesListWidget*>(statesDock->widget());
@@ -701,10 +701,10 @@ void MainWindow::stepBackward()
         } else if (newHeadPosition < oldHeadPosition) {
             tapeWidget->animateHeadMovement(false);
         } else {
-            tapeWidget->updateTapeDisplay();
+            tapeWidget->updateTapeDisplay(); // This will now ensure head is visible
         }
 
-        StatesListWidget* statesWidget = statesDock->widget()->findChild<StatesListWidget*>();
+        StatesListWidget* statesWidget = qobject_cast<StatesListWidget*>(statesDock->widget());
         if (statesWidget) {
             statesWidget->highlightCurrentState(turingMachine->getCurrentState());
         }
