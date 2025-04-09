@@ -1,11 +1,14 @@
-#ifndef STATESLISTWIDGET_H
-#define STATESLISTWIDGET_H
+#pragma once
 
 #include <QWidget>
-#include <QListWidget>
-#include <QPushButton>
-#include <QVBoxLayout>
-#include "../model/TuringMachine.h"
+#include <string>
+
+// Forward declarations
+class QListWidget;
+class QListWidgetItem;
+class QPushButton;
+class QVBoxLayout;
+class TuringMachine;
 
 class StatesListWidget : public QWidget
 {
@@ -13,7 +16,8 @@ class StatesListWidget : public QWidget
 
 public:
     explicit StatesListWidget(TuringMachine* machine, QWidget *parent = nullptr);
-    void setMachine(TuringMachine* machine); // New setter to update the pointer
+
+    void setMachine(TuringMachine* machine);
     void refreshStatesList();
     void highlightCurrentState(const std::string& currentStateId);
 
@@ -21,14 +25,14 @@ public:
         void stateAdded(const std::string& stateId);
     void stateEdited(const std::string& stateId);
     void stateRemoved(const std::string& stateId);
-    void stateSelected(const std::string& stateId); // New signal for state selection
+    void stateSelected(const std::string& stateId);
 
     private slots:
         void addState();
     void editState();
     void removeState();
     void updateButtons();
-    void onStateSelectionChanged(); // New slot for handling selection changes
+    void onStateSelectionChanged();
 
 private:
     TuringMachine* machine;
@@ -40,5 +44,3 @@ private:
 
     void setupUI();
 };
-
-#endif // STATESLISTWIDGET_H

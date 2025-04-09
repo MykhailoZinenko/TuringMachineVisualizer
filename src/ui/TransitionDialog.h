@@ -1,23 +1,25 @@
-#ifndef TRANSITIONDIALOG_H
-#define TRANSITIONDIALOG_H
+#pragma once
 
 #include <QDialog>
-#include <QComboBox>
-#include <QLineEdit>
-#include <QDialogButtonBox>
-#include <QFormLayout>
-#include "../model/Transition.h"
-#include "../model/TuringMachine.h"
+
+// Forward declarations
+class QComboBox;
+class QLineEdit;
+class QDialogButtonBox;
+class QFormLayout;
+class Transition;
+class TuringMachine;
+
+enum class Direction;
 
 class TransitionDialog : public QDialog
 {
     Q_OBJECT
 
 public:
-    explicit TransitionDialog(TuringMachine* machine, QWidget *parent = nullptr, 
+    explicit TransitionDialog(TuringMachine* machine, QWidget *parent = nullptr,
                              Transition* existingTransition = nullptr);
-    
-    // Getters for the transition properties
+
     QString getFromState() const;
     QString getToState() const;
     QChar getReadSymbol() const;
@@ -31,8 +33,6 @@ private:
     QLineEdit *writeSymbolEdit;
     QComboBox *directionComboBox;
     QDialogButtonBox *buttonBox;
-    
+
     Transition* existingTransition;
 };
-
-#endif // TRANSITIONDIALOG_H

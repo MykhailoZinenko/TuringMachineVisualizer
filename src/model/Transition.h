@@ -1,5 +1,4 @@
-#ifndef TRANSITION_H
-#define TRANSITION_H
+#pragma once
 
 #include <string>
 
@@ -11,34 +10,37 @@ enum class Direction {
 
 class Transition {
 public:
-    Transition(const std::string& fromState, char readSymbol, 
-               const std::string& toState, char writeSymbol, 
+    // Constructor & destructor
+    Transition(const std::string& fromState, char readSymbol,
+               const std::string& toState, char writeSymbol,
                Direction moveDirection);
     ~Transition();
-    
-    // Getters and setters
+
+    // State accessors
     std::string getFromState() const;
     void setFromState(const std::string& state);
-    
+
     std::string getToState() const;
     void setToState(const std::string& state);
-    
+
+    // Symbol accessors
     char getReadSymbol() const;
     void setReadSymbol(char symbol);
-    
+
     char getWriteSymbol() const;
     void setWriteSymbol(char symbol);
-    
+
+    // Direction accessors
     Direction getDirection() const;
     void setDirection(Direction direction);
-    
-    // For serialization
-    std::string toString() const;
-    static Transition fromString(const std::string& str);
-    
-    // For validation and display
+
+    // Utility methods
     bool isValid() const;
     std::string getDisplayText() const;
+
+    // Serialization
+    std::string toString() const;
+    static Transition fromString(const std::string& str);
 
 private:
     std::string fromState;
@@ -47,5 +49,3 @@ private:
     char writeSymbol;
     Direction moveDirection;
 };
-
-#endif // TRANSITION_H

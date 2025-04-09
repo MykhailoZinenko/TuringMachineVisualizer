@@ -1,6 +1,6 @@
 #include "Transition.h"
-#include <vector>
 #include <sstream>
+#include <vector>
 
 Transition::Transition(const std::string& fromState, char readSymbol,
                        const std::string& toState, char writeSymbol,
@@ -65,10 +65,32 @@ void Transition::setDirection(Direction direction)
     moveDirection = direction;
 }
 
+bool Transition::isValid() const
+{
+    return !fromState.empty() && !toState.empty();
+}
+
+std::string Transition::getDisplayText() const
+{
+    std::string dirText;
+    switch (moveDirection) {
+        case Direction::LEFT:
+            dirText = "L";
+            break;
+        case Direction::RIGHT:
+            dirText = "R";
+            break;
+        case Direction::STAY:
+            dirText = "S";
+            break;
+    }
+
+    return std::string(1, readSymbol) + " → " +
+           std::string(1, writeSymbol) + ", " + dirText;
+}
+
 std::string Transition::toString() const
 {
-    // Simple string representation for serialization
-    // Format: fromState|readSymbol|toState|writeSymbol|direction
     return fromState + "|" + readSymbol + "|" +
            toState + "|" + writeSymbol + "|" +
            std::to_string(static_cast<int>(moveDirection));
@@ -85,7 +107,7 @@ Transition Transition::fromString(const std::string& str)
     }
 
     if (parts.size() < 5) {
-        return Transition("q0", '_', "q1", '_', Direction::RIGHT); // Fallback
+        return Transition("q0", '_', "q1", '_', Direction::RIGHT);
     }
 
     std::string fromState = parts[0];
@@ -95,30 +117,4 @@ Transition Transition::fromString(const std::string& str)
     Direction direction = static_cast<Direction>(std::stoi(parts[4]));
 
     return Transition(fromState, readSymbol, toState, writeSymbol, direction);
-}
-
-bool Transition::isValid() const
-{
-    // Check if transition is valid
-    return !fromState.empty() && !toState.empty();
-}
-
-std::string Transition::getDisplayText() const
-{
-    // Create display text for visualization
-    std::string dirText;
-    switch (moveDirection) {
-        case Direction::LEFT:
-            dirText = "L";
-            break;
-        case Direction::RIGHT:
-            dirText = "R";
-            break;
-        case Direction::STAY:
-            dirText = "S";
-            break;
-    }
-    
-    return std::string(1, readSymbol) + " → " + 
-           std::string(1, writeSymbol) + ", " + dirText;
 }

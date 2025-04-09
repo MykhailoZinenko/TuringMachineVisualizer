@@ -1,14 +1,17 @@
-#ifndef TAPEWIDGET_H
-#define TAPEWIDGET_H
+#pragma once
 
 #include <QWidget>
-#include <QPainter>
-#include <QPaintEvent>
-#include <QTimer>
-#include <QPropertyAnimation>
-#include <QInputDialog>
-#include <QMenu>
-#include "../model/Tape.h"
+
+// Forward declarations
+class QPainter;
+class QPaintEvent;
+class QTimer;
+class QPropertyAnimation;
+class QMouseEvent;
+class QContextMenuEvent;
+class QWheelEvent;
+class QResizeEvent;
+class Tape;
 
 class TapeWidget : public QWidget
 {
@@ -16,20 +19,27 @@ class TapeWidget : public QWidget
     Q_PROPERTY(qreal headAnimation READ headAnimation WRITE setHeadAnimation)
 
 public:
+    // Constructor & destructor
     explicit TapeWidget(QWidget *parent = nullptr);
     ~TapeWidget();
 
+    // Core functionality
     void setTape(Tape* tape);
     void updateTapeDisplay();
     void animateHeadMovement(bool moveRight);
 
-    // For animation property
+    // Animation property
     qreal headAnimation() const { return m_headAnimation; }
     void setHeadAnimation(qreal value);
 
-    // Interactive mode control
+    // Interactive mode
     void setInteractiveMode(bool enabled);
     bool isInteractiveMode() const { return m_interactiveMode; }
+
+    // Zoom control
+    void zoomIn();
+    void zoomOut();
+    void resetZoom();
 
 signals:
     void cellValueChanged(int position, char newValue);
@@ -38,11 +48,9 @@ signals:
 
 public slots:
     void onStepExecuted();
-    void zoomIn();
-    void zoomOut();
-    void resetZoom();
 
 protected:
+    // Qt event handlers
     void paintEvent(QPaintEvent *event) override;
     void mousePressEvent(QMouseEvent *event) override;
     void mouseDoubleClickEvent(QMouseEvent *event) override;
@@ -52,32 +60,31 @@ protected:
     void resizeEvent(QResizeEvent *event) override;
 
 private:
+    // Data
     Tape* m_tape;
-    int m_visibleCells;       // Number of visible cells
-    int m_cellSize;           // Size of each cell in pixels
-    int m_leftmostCell;       // Index of leftmost visible cell
-    int m_headAnimOffset;     // Animation offset for head movement
-    qreal m_headAnimation;    // Animation property (0.0 to 1.0)
-    bool m_interactiveMode;   // Whether the tape is in interactive mode
+    int m_visibleCells;
+    int m_cellSize;
+    int m_leftmostCell;
+    int m_headAnimOffset;
+    qreal m_headAnimation;
+    bool m_interactiveMode;
 
-    QTimer* m_updateTimer;    // Timer for automatic updates
-    QPropertyAnimation* m_headAnimationObj; // Animation object
+    // UI components
+    QTimer* m_updateTimer;
+    QPropertyAnimation* m_headAnimationObj;
 
-    int xToCell(int x) const; // Convert x coordinate to cell index
-    QRect getCellRect(int cellIndex) const; // Get rectangle for a cell
-    void centerHeadPosition(); // Center the head in the view
-    void ensureCellVisible(int cellIndex); // Make sure a cell is visible
-    void ensureHeadVisible();  // Ensure the head is in view
-    void updateCellSize(); // Recalculate cell size based on widget size
-
-    // Interactive functions
+    // Helper methods
+    int xToCell(int x) const;
+    QRect getCellRect(int cellIndex) const;
+    void centerHeadPosition();
+    void ensureCellVisible(int cellIndex);
+    void ensureHeadVisible();
+    void updateCellSize();
     void editCellValue(int cellIndex);
     void moveHeadToCell(int cellIndex);
-    
-    // Drawing helpers
+
+    // Drawing methods
     void drawCell(QPainter &painter, int cellIndex, const QRect &rect, char symbol);
     void drawHead(QPainter &painter);
     void drawGrid(QPainter &painter);
 };
-
-#endif // TAPEWIDGET_H

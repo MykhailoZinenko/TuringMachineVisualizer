@@ -1,12 +1,15 @@
-#ifndef STATEDIALOG_H
-#define STATEDIALOG_H
+#pragma once
 
 #include <QDialog>
-#include <QLineEdit>
-#include <QComboBox>
-#include <QDialogButtonBox>
-#include <QFormLayout>
-#include "../model/State.h"
+
+// Forward declarations
+class QLineEdit;
+class QComboBox;
+class QDialogButtonBox;
+class QFormLayout;
+class State;
+
+enum class StateType;
 
 class StateDialog : public QDialog
 {
@@ -14,8 +17,7 @@ class StateDialog : public QDialog
 
 public:
     explicit StateDialog(QWidget *parent = nullptr, State* existingState = nullptr);
-    
-    // Getters for the state properties
+
     QString getStateId() const;
     QString getStateName() const;
     StateType getStateType() const;
@@ -25,8 +27,6 @@ private:
     QLineEdit *nameEdit;
     QComboBox *typeComboBox;
     QDialogButtonBox *buttonBox;
-    
+
     State* existingState;
 };
-
-#endif // STATEDIALOG_H

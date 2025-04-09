@@ -1,16 +1,17 @@
-#ifndef TAPECONTROLWIDGET_H
-#define TAPECONTROLWIDGET_H
+#pragma once
 
 #include <QWidget>
-#include <QLineEdit>
-#include <QPushButton>
-#include <QToolButton>
-#include <QLabel>
-#include <QSpinBox>
-#include <QSlider>
-#include <QCheckBox>
-#include "../model/Tape.h"
-#include "TapeWidget.h"
+
+// Forward declarations
+class QLineEdit;
+class QPushButton;
+class QToolButton;
+class QLabel;
+class QSpinBox;
+class QSlider;
+class QCheckBox;
+class Tape;
+class TapeWidget;
 
 class TapeControlWidget : public QWidget
 {
@@ -33,9 +34,11 @@ public:
     void onTapeModified();
 
 private:
+    // Data
     Tape* m_tape;
     TapeWidget* m_tapeWidget;
 
+    // UI elements
     QLineEdit* m_tapeContentEdit;
     QSpinBox* m_initialHeadPositionSpin;
     QPushButton* m_setTapeButton;
@@ -44,12 +47,10 @@ private:
     QToolButton* m_shiftRightButton;
     QLabel* m_currentTapeLabel;
     QCheckBox* m_interactiveModeCheckbox;
-
     QSlider* m_speedSlider;
     QLabel* m_speedLabel;
 
+    // Setup methods
     void setupUI();
     void updateCurrentTapeLabel();
 };
-
-#endif // TAPECONTROLWIDGET_H

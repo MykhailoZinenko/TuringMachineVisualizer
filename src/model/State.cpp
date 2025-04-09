@@ -1,8 +1,9 @@
 #include "State.h"
 #include <sstream>
+#include <vector>
 
 State::State(const std::string& id, const std::string& name, StateType type)
-    : id(id), name(name), type(type), position(0, 0)
+    : id(id), name(name), type(type), position(0.0f, 0.0f)
 {
 }
 
@@ -40,12 +41,12 @@ void State::setType(StateType type)
     this->type = type;
 }
 
-QPointF State::getPosition() const
+Point2D State::getPosition() const
 {
     return position;
 }
 
-void State::setPosition(const QPointF& position)
+void State::setPosition(const Point2D& position)
 {
     this->position = position;
 }
@@ -72,9 +73,7 @@ bool State::isNormalState() const
 
 std::string State::toString() const
 {
-    // Simple string representation for serialization
-    // Format: id|name|type|posX|posY
-    return id + "|" + name + "|" + 
+    return id + "|" + name + "|" +
            std::to_string(static_cast<int>(type)) + "|" +
            std::to_string(position.x()) + "|" +
            std::to_string(position.y());
@@ -86,14 +85,12 @@ State State::fromString(const std::string& str)
     std::string part;
     std::stringstream ss(str);
 
-    // Split the string by '|'
     while (std::getline(ss, part, '|')) {
         parts.push_back(part);
     }
 
-    // Ensure we have all required parts (at least id, others optional with defaults)
     if (parts.empty()) {
-        return State("default"); // Fallback if string is malformed
+        return State("default");
     }
 
     std::string id = parts[0];
@@ -103,6 +100,6 @@ State State::fromString(const std::string& str)
     float posY = (parts.size() > 4) ? std::stof(parts[4]) : 0.0f;
 
     State state(id, name, type);
-    state.setPosition(QPointF(posX, posY));
+    state.setPosition(Point2D(posX, posY));
     return state;
 }

@@ -1,10 +1,10 @@
-#ifndef PREFERENCESDIALOG_H
-#define PREFERENCESDIALOG_H
+#pragma once
 
 #include <QDialog>
-#include <QSpinBox>
-#include <QDialogButtonBox>
-#include <QFormLayout>
+
+// Forward declarations
+class QSpinBox;
+class QDialogButtonBox;
 
 class PreferencesDialog : public QDialog
 {
@@ -18,5 +18,3 @@ private:
     QSpinBox* speedSpinBox;
     QDialogButtonBox* buttonBox;
 };
-
-#endif // PREFERENCESDIALOG_H

@@ -1,27 +1,36 @@
-#ifndef MAINWINDOW_H
-#define MAINWINDOW_H
+#pragma once
 
 #include <QMainWindow>
-#include <QAction>
-#include <QMenu>
-#include <QToolBar>
-#include <QStatusBar>
-#include <QDockWidget>
-#include "model/TuringMachine.h"
-#include "ui/StatesListWidget.h"
-#include "ui/TransitionsListWidget.h"
-#include "ui/TapeWidget.h"
-#include "ui/TapeControlWidget.h"
-#include "ui/PreferencesDialog.h"
-#include "ui/PropertiesEditorWidget.h"
+#include <memory>
+#include <string>
+
+// Forward declarations
+class QAction;
+class QMenu;
+class QToolBar;
+class QStatusBar;
+class QDockWidget;
+class QTimer;
+
+class TuringMachine;
+class TapeWidget;
+class TapeControlWidget;
+class StatesListWidget;
+class TransitionsListWidget;
+class PropertiesEditorWidget;
 
 class MainWindow : public QMainWindow
 {
     Q_OBJECT
 
 public:
-    MainWindow(QWidget *parent = nullptr);
+    // Constructor & destructor
+    explicit MainWindow(QWidget *parent = nullptr);
     ~MainWindow();
+
+protected:
+    // Event handlers
+    void closeEvent(QCloseEvent *event) override;
 
 private slots:
     // File menu actions
@@ -44,33 +53,72 @@ private slots:
     void showAboutDialog();
     void showHelpContents();
 
-    // Changes tracking
-    void setDirty(bool dirty = true);
+    // State & transition handling
     void handleStateAdded(const std::string& stateId);
     void handleStateEdited(const std::string& stateId);
     void handleStateRemoved(const std::string& stateId);
+    void onStateSelected(const std::string& stateId);
+
     void handleTransitionAdded();
     void handleTransitionEdited();
     void handleTransitionRemoved();
-    void handleTapeContentChanged();
-
-    void onStateSelected(const std::string& stateId);
     void onTransitionSelected(const std::string& fromState, char readSymbol);
+
+    // Property changes
     void onMachinePropertiesChanged();
     void onStatePropertiesChanged(const std::string& stateId);
     void onTransitionPropertiesChanged(const std::string& fromState, char readSymbol);
 
+    // Tape interaction
+    void handleTapeContentChanged();
     void onCellValueChanged(int position, char newValue);
     void onHeadPositionChanged(int newPosition);
 
 private:
-    // Data model
+    // Core data
     std::unique_ptr<TuringMachine> turingMachine;
+    QString currentFileName;
+    bool isDirty;
 
-    // UI Components
+    // Simulation control
+    QTimer* simulationTimer;
+    int simulationSpeed;
+
+    // UI components - Widgets
     TapeWidget* tapeWidget;
     TapeControlWidget* tapeControlWidget;
     PropertiesEditorWidget* propertiesEditor;
+
+    // UI components - Docks
+    QDockWidget *statesDock;
+    QDockWidget *transitionsDock;
+    QDockWidget *propertiesDock;
+
+    // UI components - Menus
+    QMenu *fileMenu;
+    QMenu *editMenu;
+    QMenu *simulationMenu;
+    QMenu *viewMenu;
+    QMenu *helpMenu;
+
+    // UI components - Toolbars
+    QToolBar *fileToolBar;
+    QToolBar *simulationToolBar;
+
+    // UI components - Actions
+    QAction *newAction;
+    QAction *openAction;
+    QAction *saveAction;
+    QAction *saveAsAction;
+    QAction *exitAction;
+    QAction *preferencesAction;
+    QAction *runAction;
+    QAction *pauseAction;
+    QAction *stepForwardAction;
+    QAction *stepBackwardAction;
+    QAction *resetAction;
+    QAction *aboutAction;
+    QAction *helpAction;
 
     // Setup methods
     void createActions();
@@ -79,56 +127,12 @@ private:
     void createStatusBar();
     void createDockWindows();
     void setupCentralWidget();
+
+    // Settings management
     void readSettings();
     void writeSettings();
 
-    // Event overrides
-    void closeEvent(QCloseEvent *event) override;
-
-    // UI Components
-    QMenu *fileMenu;
-    QMenu *editMenu;
-    QMenu *simulationMenu;
-    QMenu *viewMenu;
-    QMenu *helpMenu;
-
-    QToolBar *fileToolBar;
-    QToolBar *simulationToolBar;
-
-    // File actions
-    QAction *newAction;
-    QAction *openAction;
-    QAction *saveAction;
-    QAction *saveAsAction;
-    QAction *exitAction;
-
-    // Edit actions
-    QAction *preferencesAction;
-
-    // Simulation actions
-    QAction *runAction;
-    QAction *pauseAction;
-    QAction *stepForwardAction;
-    QAction *stepBackwardAction;
-    QAction *resetAction;
-
-    QTimer* simulationTimer;
-    int simulationSpeed;
-
-    // Help actions
-    QAction *aboutAction;
-    QAction *helpAction;
-
-    // Dock widgets
-    QDockWidget *statesDock;
-    QDockWidget *transitionsDock;
-    QDockWidget *propertiesDock;
-
-    QString currentFileName;
-
-    // Tracking unsaved changes
-    bool isDirty;
+    // UI state methods
+    void setDirty(bool dirty = true);
     void updateWindowTitle();
 };
-
-#endif // MAINWINDOW_H

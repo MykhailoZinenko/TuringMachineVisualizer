@@ -1,5 +1,11 @@
 #include "PreferencesDialog.h"
 
+// Qt includes
+#include <QFormLayout>
+#include <QVBoxLayout>
+#include <QSpinBox>
+#include <QDialogButtonBox>
+
 PreferencesDialog::PreferencesDialog(int currentSpeed, QWidget *parent)
     : QDialog(parent)
 {

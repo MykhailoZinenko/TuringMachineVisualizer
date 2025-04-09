@@ -1,9 +1,8 @@
 #include "Tape.h"
 #include <algorithm>
-#include <iostream>
 
 Tape::Tape(char blankSymbol)
-    : headPosition(0), blankSymbol(blankSymbol), 
+    : headPosition(0), blankSymbol(blankSymbol),
       leftmostUsed(0), rightmostUsed(0)
 {
 }
@@ -24,7 +23,6 @@ char Tape::read() const
 void Tape::write(char symbol)
 {
     if (symbol == blankSymbol) {
-        // If writing blank symbol, remove the cell to save memory
         cells.erase(headPosition);
     } else {
         cells[headPosition] = symbol;
@@ -80,10 +78,9 @@ void Tape::setInitialContent(const std::string& content)
 
 std::string Tape::getCurrentContent(int windowSize) const
 {
-    // Get content centered around head position
     int start = headPosition - windowSize / 2;
     int end = headPosition + windowSize / 2;
-    
+
     std::string result;
     for (int i = start; i <= end; ++i) {
         auto it = cells.find(i);
@@ -93,7 +90,7 @@ std::string Tape::getCurrentContent(int windowSize) const
             result += blankSymbol;
         }
     }
-    
+
     return result;
 }
 
@@ -101,14 +98,13 @@ std::vector<std::pair<int, char>> Tape::getVisiblePortion(int firstCellIndex, in
 {
     std::vector<std::pair<int, char>> result;
 
-    // Simply return the requested cell
     auto it = cells.find(firstCellIndex);
     if (it != cells.end()) {
         result.push_back(std::make_pair(firstCellIndex, it->second));
     } else {
         result.push_back(std::make_pair(firstCellIndex, blankSymbol));
     }
-    
+
     return result;
 }
 
@@ -124,13 +120,11 @@ int Tape::getRightmostUsedPosition() const
 
 void Tape::updateBounds(int position)
 {
-    // Skip if the position contains the blank symbol (i.e., no cell)
     auto it = cells.find(position);
     if (it == cells.end()) {
         return;
     }
-    
-    // Update bounds
+
     leftmostUsed = std::min(leftmostUsed, position);
     rightmostUsed = std::max(rightmostUsed, position);
 }

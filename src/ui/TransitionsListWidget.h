@@ -1,11 +1,13 @@
-#ifndef TRANSITIONSLISTWIDGET_H
-#define TRANSITIONSLISTWIDGET_H
+#pragma once
 
 #include <QWidget>
-#include <QTableWidget>
-#include <QPushButton>
-#include <QVBoxLayout>
-#include "../model/TuringMachine.h"
+#include <string>
+
+// Forward declarations
+class QTableWidget;
+class QPushButton;
+class TuringMachine;
+class Transition;
 
 class TransitionsListWidget : public QWidget
 {
@@ -13,14 +15,15 @@ class TransitionsListWidget : public QWidget
 
 public:
     explicit TransitionsListWidget(TuringMachine* machine, QWidget *parent = nullptr);
-    void setMachine(TuringMachine* machine); // New setter to update the pointer
+
+    void setMachine(TuringMachine* machine);
     void refreshTransitionsList();
 
     signals:
         void transitionAdded();
     void transitionEdited();
     void transitionRemoved();
-    void transitionSelected(const std::string& fromState, char readSymbol); // New signal for transition selection
+    void transitionSelected(const std::string& fromState, char readSymbol);
 
     private slots:
         void addTransition();
@@ -28,7 +31,7 @@ public:
     void removeTransition();
     void updateButtons();
     void handleCellDoubleClick(int row, int column);
-    void onTransitionSelectionChanged(); // New slot for handling selection changes
+    void onTransitionSelectionChanged();
 
 private:
     TuringMachine* machine;
@@ -41,5 +44,3 @@ private:
     void setupUI();
     Transition* getSelectedTransition();
 };
-
-#endif // TRANSITIONSLISTWIDGET_H

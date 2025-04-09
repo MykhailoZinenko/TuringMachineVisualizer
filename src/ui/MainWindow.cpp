@@ -1,4 +1,6 @@
 #include "MainWindow.h"
+
+// Qt includes
 #include <QApplication>
 #include <QMenuBar>
 #include <QToolBar>
@@ -13,18 +15,28 @@
 #include <QWidget>
 #include <QScreen>
 #include <QGuiApplication>
+#include <QTimer>
+#include <QCheckBox>
 
+// Project includes
+#include "../model/TuringMachine.h"
+#include "StatesListWidget.h"
+#include "TransitionsListWidget.h"
+#include "TapeWidget.h"
+#include "TapeControlWidget.h"
+#include "PreferencesDialog.h"
+#include "PropertiesEditorWidget.h"
+
+// Constructor & destructor
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent), isDirty(false)
 {
-    // Create the Turing Machine model
     turingMachine = std::make_unique<TuringMachine>("Untitled");
 
     simulationTimer = new QTimer(this);
     connect(simulationTimer, &QTimer::timeout, this, &MainWindow::stepForward);
     simulationSpeed = 500; // Default speed: 500ms per step
 
-    // Setup UI components
     createActions();
     createMenus();
     createToolBars();
@@ -32,44 +44,537 @@ MainWindow::MainWindow(QWidget *parent)
     setupCentralWidget();
     createDockWindows();
 
-    // Read settings
     readSettings();
-
-    // Initialize window title
     updateWindowTitle();
 
     statusBar()->showMessage(tr("Ready"));
 }
 
-void MainWindow::setDirty(bool dirty)
-{
-    if (isDirty != dirty) {
-        isDirty = dirty;
-        updateWindowTitle();
-        saveAction->setEnabled(isDirty);
-    }
-}
-
-void MainWindow::updateWindowTitle()
-{
-    QString title = turingMachine->getName().c_str();
-    if (title.isEmpty()) {
-        title = "Untitled";
-    }
-
-    if (isDirty) {
-        title += " *";
-    }
-
-    setWindowTitle(title + " - Turing Machine Visualizer");
-}
-
 MainWindow::~MainWindow()
 {
-    // Clean up resources
     delete simulationTimer;
 }
 
+// Event handlers
+void MainWindow::closeEvent(QCloseEvent *event)
+{
+    if (isDirty) {
+        QMessageBox::StandardButton reply = QMessageBox::question(
+            this, tr("Unsaved Changes"),
+            tr("You have unsaved changes. Do you want to save before closing?"),
+            QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel);
+
+        if (reply == QMessageBox::Save) {
+            saveMachine();
+            if (isDirty) {
+                // User canceled save operation
+                event->ignore();
+                return;
+            }
+        } else if (reply == QMessageBox::Cancel) {
+            event->ignore();
+            return;
+        }
+    }
+
+    writeSettings();
+    event->accept();
+}
+
+// File menu actions
+void MainWindow::newMachine()
+{
+    if (isDirty) {
+        QMessageBox::StandardButton reply = QMessageBox::question(
+            this, tr("Unsaved Changes"),
+            tr("You have unsaved changes. Do you want to save before creating a new machine?"),
+            QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel);
+
+        if (reply == QMessageBox::Save) {
+            saveMachine();
+            if (isDirty) {
+                return;
+            }
+        } else if (reply == QMessageBox::Cancel) {
+            return;
+        }
+    }
+
+    turingMachine = std::make_unique<TuringMachine>("Untitled");
+
+    tapeWidget->setTape(turingMachine->getTape());
+    tapeControlWidget->setTape(turingMachine->getTape());
+    tapeControlWidget->resetTape();
+
+    StatesListWidget* statesWidget = qobject_cast<StatesListWidget*>(statesDock->widget());
+    if (statesWidget) {
+        statesWidget->setMachine(turingMachine.get());
+    }
+
+    TransitionsListWidget* transitionsWidget = qobject_cast<TransitionsListWidget*>(transitionsDock->widget());
+    if (transitionsWidget) {
+        transitionsWidget->setMachine(turingMachine.get());
+    }
+
+    if (propertiesEditor) {
+        propertiesEditor->setMachine(turingMachine.get());
+    }
+
+    runAction->setEnabled(true);
+    pauseAction->setEnabled(false);
+    stepForwardAction->setEnabled(true);
+    stepBackwardAction->setEnabled(false);
+
+    currentFileName.clear();
+    setDirty(false);
+
+    statusBar()->showMessage(tr("Created new machine"), 2000);
+}
+
+void MainWindow::openMachine()
+{
+    if (isDirty) {
+        QMessageBox::StandardButton reply = QMessageBox::question(
+            this, tr("Unsaved Changes"),
+            tr("You have unsaved changes. Do you want to save before opening another machine?"),
+            QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel);
+
+        if (reply == QMessageBox::Save) {
+            saveMachine();
+            if (isDirty) {
+                return;
+            }
+        } else if (reply == QMessageBox::Cancel) {
+            return;
+        }
+    }
+
+    QString fileName = QFileDialog::getOpenFileName(this,
+        tr("Open Turing Machine"), "",
+        tr("Turing Machine Files (*.tm);;All Files (*)"));
+
+    if (fileName.isEmpty()) return;
+
+    QFile file(fileName);
+    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        QMessageBox::warning(this, tr("Error"), tr("Could not open file."));
+        return;
+    }
+
+    QTextStream in(&file);
+    std::string jsonStr = in.readAll().toStdString();
+    file.close();
+
+    try {
+        auto loadedMachine = TuringMachine::fromJson(jsonStr);
+        if (!loadedMachine) {
+            throw std::runtime_error("Failed to create machine from file");
+        }
+
+        turingMachine = std::move(loadedMachine);
+        currentFileName = fileName;
+
+        tapeWidget->setTape(turingMachine->getTape());
+        tapeControlWidget->setTape(turingMachine->getTape());
+        tapeControlWidget->resetTape();
+
+        StatesListWidget* statesWidget = qobject_cast<StatesListWidget*>(statesDock->widget());
+        if (statesWidget) {
+            statesWidget->setMachine(turingMachine.get());
+        }
+
+        TransitionsListWidget* transitionsWidget = qobject_cast<TransitionsListWidget*>(transitionsDock->widget());
+        if (transitionsWidget) {
+            transitionsWidget->setMachine(turingMachine.get());
+        }
+
+        if (propertiesEditor) {
+            propertiesEditor->setMachine(turingMachine.get());
+        }
+
+        runAction->setEnabled(true);
+        pauseAction->setEnabled(false);
+        stepForwardAction->setEnabled(true);
+        stepBackwardAction->setEnabled(turingMachine->canStepBackward());
+
+        setDirty(false);
+
+        statusBar()->showMessage(tr("Opened %1").arg(fileName), 2000);
+    } catch (const std::exception& e) {
+        QMessageBox::warning(this, tr("Error"), tr("Invalid file format: %1").arg(e.what()));
+
+        turingMachine = std::make_unique<TuringMachine>("Untitled");
+        currentFileName.clear();
+
+        tapeWidget->setTape(turingMachine->getTape());
+        tapeControlWidget->setTape(turingMachine->getTape());
+        tapeControlWidget->resetTape();
+
+        StatesListWidget* statesWidget = qobject_cast<StatesListWidget*>(statesDock->widget());
+        if (statesWidget) {
+            statesWidget->setMachine(turingMachine.get());
+        }
+
+        TransitionsListWidget* transitionsWidget = qobject_cast<TransitionsListWidget*>(transitionsDock->widget());
+        if (transitionsWidget) {
+            transitionsWidget->setMachine(turingMachine.get());
+        }
+
+        setDirty(false);
+    }
+}
+
+void MainWindow::saveMachine()
+{
+    if (currentFileName.isEmpty()) {
+        saveAsOperation();
+        return;
+    }
+
+    QFile file(currentFileName);
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        QMessageBox::warning(this, tr("Error"), tr("Could not save file."));
+        return;
+    }
+
+    std::string jsonStr = turingMachine->toJson();
+    QTextStream out(&file);
+    out << QString::fromStdString(jsonStr);
+    file.close();
+
+    setDirty(false);
+    statusBar()->showMessage(tr("Machine saved to %1").arg(currentFileName), 2000);
+}
+
+void MainWindow::saveAsOperation()
+{
+    QString fileName = QFileDialog::getSaveFileName(this,
+        tr("Save Turing Machine"), "",
+        tr("Turing Machine Files (*.tm);;All Files (*)"));
+
+    if (fileName.isEmpty()) return;
+
+    if (!fileName.endsWith(".tm", Qt::CaseInsensitive)) {
+        fileName += ".tm";
+    }
+
+    QFile file(fileName);
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        QMessageBox::warning(this, tr("Error"), tr("Could not save file."));
+        return;
+    }
+
+    std::string jsonStr = turingMachine->toJson();
+    QTextStream out(&file);
+    out << QString::fromStdString(jsonStr);
+    file.close();
+
+    currentFileName = fileName;
+    setDirty(false);
+    statusBar()->showMessage(tr("Saved as %1").arg(fileName), 2000);
+}
+
+// Edit menu actions
+void MainWindow::editPreferences()
+{
+    PreferencesDialog dialog(simulationSpeed, this);
+    if (dialog.exec() == QDialog::Accepted) {
+        simulationSpeed = dialog.getSimulationSpeed();
+        if (simulationTimer->isActive()) {
+            simulationTimer->setInterval(simulationSpeed);
+        }
+        statusBar()->showMessage(tr("Preferences updated"), 2000);
+    }
+}
+
+// Simulation menu actions
+void MainWindow::runSimulation()
+{
+    if (turingMachine->getStatus() == ExecutionStatus::HALTED_ACCEPT ||
+        turingMachine->getStatus() == ExecutionStatus::HALTED_REJECT ||
+        turingMachine->getStatus() == ExecutionStatus::ERROR) {
+        statusBar()->showMessage(tr("Cannot run - machine has halted"), 2000);
+        return;
+    }
+
+    tapeWidget->setInteractiveMode(false);
+    if (tapeControlWidget) {
+        QCheckBox* interactiveModeCheckbox = tapeControlWidget->findChild<QCheckBox*>();
+        if (interactiveModeCheckbox) {
+            interactiveModeCheckbox->setChecked(false);
+            interactiveModeCheckbox->setEnabled(false);
+        }
+    }
+
+    runAction->setEnabled(false);
+    pauseAction->setEnabled(true);
+    stepForwardAction->setEnabled(false);
+    stepBackwardAction->setEnabled(false);
+    resetAction->setEnabled(true);
+
+    simulationTimer->start(simulationSpeed);
+    statusBar()->showMessage(tr("Simulation running..."));
+}
+
+void MainWindow::pauseSimulation()
+{
+    simulationTimer->stop();
+
+    if (tapeControlWidget) {
+        QCheckBox* interactiveModeCheckbox = tapeControlWidget->findChild<QCheckBox*>();
+        if (interactiveModeCheckbox) {
+            interactiveModeCheckbox->setEnabled(true);
+        }
+    }
+
+    runAction->setEnabled(true);
+    pauseAction->setEnabled(false);
+    stepForwardAction->setEnabled(true);
+    stepBackwardAction->setEnabled(turingMachine->canStepBackward());
+
+    statusBar()->showMessage(tr("Simulation paused"), 2000);
+}
+
+void MainWindow::resetSimulation()
+{
+    simulationTimer->stop();
+    turingMachine->reset();
+    tapeWidget->updateTapeDisplay();
+
+    tapeWidget->setInteractiveMode(true);
+    if (tapeControlWidget) {
+        QCheckBox* interactiveModeCheckbox = tapeControlWidget->findChild<QCheckBox*>();
+        if (interactiveModeCheckbox) {
+            interactiveModeCheckbox->setChecked(true);
+            interactiveModeCheckbox->setEnabled(true);
+        }
+    }
+
+    StatesListWidget* statesWidget = qobject_cast<StatesListWidget*>(statesDock->widget());
+    if (statesWidget) {
+        statesWidget->highlightCurrentState(turingMachine->getCurrentState());
+    }
+
+    runAction->setEnabled(true);
+    pauseAction->setEnabled(false);
+    stepForwardAction->setEnabled(true);
+    stepBackwardAction->setEnabled(false);
+
+    statusBar()->showMessage(tr("Simulation reset"), 2000);
+}
+
+void MainWindow::stepForward()
+{
+    int oldHeadPosition = turingMachine->getTape()->getHeadPosition();
+
+    if (turingMachine->step()) {
+        setDirty();
+
+        int newHeadPosition = turingMachine->getTape()->getHeadPosition();
+        if (newHeadPosition > oldHeadPosition) {
+            tapeWidget->animateHeadMovement(true);
+        } else if (newHeadPosition < oldHeadPosition) {
+            tapeWidget->animateHeadMovement(false);
+        } else {
+            tapeWidget->updateTapeDisplay();
+        }
+
+        StatesListWidget* statesWidget = qobject_cast<StatesListWidget*>(statesDock->widget());
+        if (statesWidget) {
+            statesWidget->highlightCurrentState(turingMachine->getCurrentState());
+        }
+
+        stepBackwardAction->setEnabled(true);
+        statusBar()->showMessage(tr("Running - Step %1 (State: %2)")
+            .arg(turingMachine->getStepCount())
+            .arg(QString::fromStdString(turingMachine->getCurrentState())));
+    } else {
+        simulationTimer->stop();
+
+        ExecutionStatus status = turingMachine->getStatus();
+        QString message;
+        switch (status) {
+            case ExecutionStatus::HALTED_ACCEPT:
+                message = tr("Halted - Accept State (Step %1)")
+                    .arg(turingMachine->getStepCount());
+            break;
+            case ExecutionStatus::HALTED_REJECT:
+                message = tr("Halted - Reject State (Step %1)")
+                    .arg(turingMachine->getStepCount());
+            break;
+            case ExecutionStatus::ERROR:
+                message = tr("Halted - No valid transition (Step %1)")
+                    .arg(turingMachine->getStepCount());
+            break;
+            default:
+                message = tr("Halted unexpectedly (Step %1)")
+                    .arg(turingMachine->getStepCount());
+        }
+
+        StatesListWidget* statesWidget = qobject_cast<StatesListWidget*>(statesDock->widget());
+        if (statesWidget) {
+            statesWidget->highlightCurrentState(turingMachine->getCurrentState());
+        }
+
+        runAction->setEnabled(false);
+        pauseAction->setEnabled(false);
+        stepForwardAction->setEnabled(false);
+        stepBackwardAction->setEnabled(turingMachine->canStepBackward());
+        statusBar()->showMessage(message);
+    }
+}
+
+void MainWindow::stepBackward()
+{
+    int oldHeadPosition = turingMachine->getTape()->getHeadPosition();
+
+    if (turingMachine->stepBackward()) {
+        int newHeadPosition = turingMachine->getTape()->getHeadPosition();
+        if (newHeadPosition > oldHeadPosition) {
+            tapeWidget->animateHeadMovement(true);
+        } else if (newHeadPosition < oldHeadPosition) {
+            tapeWidget->animateHeadMovement(false);
+        } else {
+            tapeWidget->updateTapeDisplay();
+        }
+
+        StatesListWidget* statesWidget = qobject_cast<StatesListWidget*>(statesDock->widget());
+        if (statesWidget) {
+            statesWidget->highlightCurrentState(turingMachine->getCurrentState());
+        }
+
+        statusBar()->showMessage(tr("Step %1 (State: %2)")
+            .arg(turingMachine->getStepCount())
+            .arg(QString::fromStdString(turingMachine->getCurrentState())));
+        stepBackwardAction->setEnabled(turingMachine->canStepBackward());
+    } else {
+        statusBar()->showMessage(tr("Cannot step backward further"), 2000);
+        stepBackwardAction->setEnabled(false);
+    }
+}
+
+// Help menu actions
+void MainWindow::showAboutDialog()
+{
+    QMessageBox::about(this, tr("About Turing Machine Visualizer"),
+        tr("<h2>Turing Machine Visualizer</h2>"
+           "<p>Version 0.1</p>"
+           "<p>A visual simulator for Turing machines.</p>"
+           "<p>Created by Your Name</p>"));
+}
+
+void MainWindow::showHelpContents()
+{
+    QMessageBox::information(this, tr("Help Contents"),
+        tr("<h2>Turing Machine Visualizer Help</h2>"
+           "<p><b>File Menu:</b> Create, open, and save machines.</p>"
+           "<p><b>Simulation Menu:</b> Run, pause, step through, or reset the simulation.</p>"
+           "<p><b>Tape Controls:</b> Set initial tape content and adjust speed.</p>"
+           "<p><b>States/Transitions:</b> Add, edit, or remove states and transitions.</p>"
+           "<p>For more details, see the project documentation.</p>"));
+    statusBar()->showMessage(tr("Help contents opened"), 2000);
+}
+
+// State & transition handling
+void MainWindow::handleStateAdded(const std::string& stateId)
+{
+    setDirty();
+}
+
+void MainWindow::handleStateEdited(const std::string& stateId)
+{
+    setDirty();
+}
+
+void MainWindow::handleStateRemoved(const std::string& stateId)
+{
+    setDirty();
+}
+
+void MainWindow::onStateSelected(const std::string& stateId)
+{
+    if (propertiesEditor) {
+        propertiesEditor->selectState(stateId);
+    }
+}
+
+void MainWindow::handleTransitionAdded()
+{
+    setDirty();
+}
+
+void MainWindow::handleTransitionEdited()
+{
+    setDirty();
+}
+
+void MainWindow::handleTransitionRemoved()
+{
+    setDirty();
+}
+
+void MainWindow::onTransitionSelected(const std::string& fromState, char readSymbol)
+{
+    if (propertiesEditor) {
+        propertiesEditor->selectTransition(fromState, readSymbol);
+    }
+}
+
+// Property changes
+void MainWindow::onMachinePropertiesChanged()
+{
+    updateWindowTitle();
+    setDirty();
+}
+
+void MainWindow::onStatePropertiesChanged(const std::string& stateId)
+{
+    StatesListWidget* statesWidget = qobject_cast<StatesListWidget*>(statesDock->widget());
+    if (statesWidget) {
+        statesWidget->refreshStatesList();
+        statesWidget->highlightCurrentState(turingMachine->getCurrentState());
+    }
+
+    setDirty();
+}
+
+void MainWindow::onTransitionPropertiesChanged(const std::string& fromState, char readSymbol)
+{
+    TransitionsListWidget* transitionsWidget = qobject_cast<TransitionsListWidget*>(transitionsDock->widget());
+    if (transitionsWidget) {
+        transitionsWidget->refreshTransitionsList();
+    }
+
+    setDirty();
+}
+
+// Tape interaction
+void MainWindow::handleTapeContentChanged()
+{
+    setDirty();
+}
+
+void MainWindow::onCellValueChanged(int position, char newValue)
+{
+    setDirty();
+    statusBar()->showMessage(tr("Cell at position %1 changed to '%2'")
+                            .arg(position)
+                            .arg(QChar(newValue)), 2000);
+}
+
+void MainWindow::onHeadPositionChanged(int newPosition)
+{
+    setDirty();
+
+    StatesListWidget* statesWidget = qobject_cast<StatesListWidget*>(statesDock->widget());
+    if (statesWidget) {
+        statesWidget->highlightCurrentState(turingMachine->getCurrentState());
+    }
+
+    statusBar()->showMessage(tr("Head moved to position %1").arg(newPosition), 2000);
+}
+
+// Setup methods
 void MainWindow::createActions()
 {
     // File actions
@@ -139,7 +644,6 @@ void MainWindow::createActions()
 
 void MainWindow::createMenus()
 {
-    // Create menus
     fileMenu = menuBar()->addMenu(tr("&File"));
     fileMenu->addAction(newAction);
     fileMenu->addAction(openAction);
@@ -167,13 +671,11 @@ void MainWindow::createMenus()
 
 void MainWindow::createToolBars()
 {
-    // File toolbar
     fileToolBar = addToolBar(tr("File"));
     fileToolBar->addAction(newAction);
     fileToolBar->addAction(openAction);
     fileToolBar->addAction(saveAction);
 
-    // Simulation toolbar
     simulationToolBar = addToolBar(tr("Simulation"));
     simulationToolBar->addAction(runAction);
     simulationToolBar->addAction(pauseAction);
@@ -203,72 +705,9 @@ void MainWindow::setupCentralWidget()
 
     tapeWidget->setTape(turingMachine->getTape());
 
-    // Connect tape content changes
     connect(tapeControlWidget, &TapeControlWidget::tapeContentChanged, this, &MainWindow::handleTapeContentChanged);
-
-    // Connect interactive tape signals
     connect(tapeWidget, &TapeWidget::cellValueChanged, this, &MainWindow::onCellValueChanged);
     connect(tapeWidget, &TapeWidget::headPositionChanged, this, &MainWindow::onHeadPositionChanged);
-}
-
-// Add handlers for tape interaction events
-void MainWindow::onCellValueChanged(int position, char newValue)
-{
-    // The tape has already been updated, just mark as dirty
-    setDirty();
-
-    statusBar()->showMessage(tr("Cell at position %1 changed to '%2'")
-                            .arg(position)
-                            .arg(QChar(newValue)), 2000);
-}
-
-void MainWindow::onHeadPositionChanged(int newPosition)
-{
-    // The tape head has already been moved, just mark as dirty
-    setDirty();
-
-    // Update state highlight if needed
-    StatesListWidget* statesWidget = qobject_cast<StatesListWidget*>(statesDock->widget());
-    if (statesWidget) {
-        statesWidget->highlightCurrentState(turingMachine->getCurrentState());
-    }
-
-    statusBar()->showMessage(tr("Head moved to position %1").arg(newPosition), 2000);
-}
-
-void MainWindow::handleStateAdded(const std::string& stateId)
-{
-    setDirty();
-}
-
-void MainWindow::handleStateEdited(const std::string& stateId)
-{
-    setDirty();
-}
-
-void MainWindow::handleStateRemoved(const std::string& stateId)
-{
-    setDirty();
-}
-
-void MainWindow::handleTransitionAdded()
-{
-    setDirty();
-}
-
-void MainWindow::handleTransitionEdited()
-{
-    setDirty();
-}
-
-void MainWindow::handleTransitionRemoved()
-{
-    setDirty();
-}
-
-void MainWindow::handleTapeContentChanged()
-{
-    setDirty();
 }
 
 void MainWindow::createDockWindows()
@@ -277,7 +716,6 @@ void MainWindow::createDockWindows()
     statesDock = new QDockWidget(tr("States"), this);
     statesDock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
 
-    // Create and add the states list widget directly as the dock widget
     StatesListWidget* statesWidget = new StatesListWidget(turingMachine.get(), this);
     statesDock->setWidget(statesWidget);
     addDockWidget(Qt::RightDockWidgetArea, statesDock);
@@ -286,7 +724,6 @@ void MainWindow::createDockWindows()
     transitionsDock = new QDockWidget(tr("Transitions"), this);
     transitionsDock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
 
-    // Create and add the transitions list widget directly as the dock widget
     TransitionsListWidget* transitionsWidget = new TransitionsListWidget(turingMachine.get(), this);
     transitionsDock->setWidget(transitionsWidget);
     addDockWidget(Qt::RightDockWidgetArea, transitionsDock);
@@ -295,7 +732,6 @@ void MainWindow::createDockWindows()
     propertiesDock = new QDockWidget(tr("Properties"), this);
     propertiesDock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea | Qt::BottomDockWidgetArea);
 
-    // Create properties editor widget
     propertiesEditor = new PropertiesEditorWidget(turingMachine.get(), this);
     propertiesDock->setWidget(propertiesEditor);
     addDockWidget(Qt::BottomDockWidgetArea, propertiesDock);
@@ -305,12 +741,11 @@ void MainWindow::createDockWindows()
     viewMenu->addAction(transitionsDock->toggleViewAction());
     viewMenu->addAction(propertiesDock->toggleViewAction());
 
-    // Connect signals for lists updating
+    // Connect signals
     connect(statesWidget, &StatesListWidget::stateAdded, transitionsWidget, &TransitionsListWidget::refreshTransitionsList);
     connect(statesWidget, &StatesListWidget::stateEdited, transitionsWidget, &TransitionsListWidget::refreshTransitionsList);
     connect(statesWidget, &StatesListWidget::stateRemoved, transitionsWidget, &TransitionsListWidget::refreshTransitionsList);
 
-    // Connect signals for dirty flag
     connect(statesWidget, &StatesListWidget::stateAdded, this, &MainWindow::handleStateAdded);
     connect(statesWidget, &StatesListWidget::stateEdited, this, &MainWindow::handleStateEdited);
     connect(statesWidget, &StatesListWidget::stateRemoved, this, &MainWindow::handleStateRemoved);
@@ -319,64 +754,15 @@ void MainWindow::createDockWindows()
     connect(transitionsWidget, &TransitionsListWidget::transitionEdited, this, &MainWindow::handleTransitionEdited);
     connect(transitionsWidget, &TransitionsListWidget::transitionRemoved, this, &MainWindow::handleTransitionRemoved);
 
-    // Connect selection signals for property editor
     connect(statesWidget, &StatesListWidget::stateSelected, this, &MainWindow::onStateSelected);
     connect(transitionsWidget, &TransitionsListWidget::transitionSelected, this, &MainWindow::onTransitionSelected);
 
-    // Connect property change signals
     connect(propertiesEditor, &PropertiesEditorWidget::machinePropertiesChanged, this, &MainWindow::onMachinePropertiesChanged);
     connect(propertiesEditor, &PropertiesEditorWidget::statePropertiesChanged, this, &MainWindow::onStatePropertiesChanged);
     connect(propertiesEditor, &PropertiesEditorWidget::transitionPropertiesChanged, this, &MainWindow::onTransitionPropertiesChanged);
 }
 
-void MainWindow::onStateSelected(const std::string& stateId)
-{
-    if (propertiesEditor) {
-        propertiesEditor->selectState(stateId);
-    }
-}
-
-void MainWindow::onTransitionSelected(const std::string& fromState, char readSymbol)
-{
-    if (propertiesEditor) {
-        propertiesEditor->selectTransition(fromState, readSymbol);
-    }
-}
-
-void MainWindow::onMachinePropertiesChanged()
-{
-    // Update window title based on machine name
-    updateWindowTitle();
-
-    // Mark as dirty
-    setDirty();
-}
-
-void MainWindow::onStatePropertiesChanged(const std::string& stateId)
-{
-    // Refresh state list widget
-    StatesListWidget* statesWidget = qobject_cast<StatesListWidget*>(statesDock->widget());
-    if (statesWidget) {
-        statesWidget->refreshStatesList();
-        statesWidget->highlightCurrentState(turingMachine->getCurrentState());
-    }
-
-    // Mark as dirty
-    setDirty();
-}
-
-void MainWindow::onTransitionPropertiesChanged(const std::string& fromState, char readSymbol)
-{
-    // Refresh transition list widget
-    TransitionsListWidget* transitionsWidget = qobject_cast<TransitionsListWidget*>(transitionsDock->widget());
-    if (transitionsWidget) {
-        transitionsWidget->refreshTransitionsList();
-    }
-
-    // Mark as dirty
-    setDirty();
-}
-
+// Settings management
 void MainWindow::readSettings()
 {
     QSettings settings("YourOrganization", "TuringMachineVisualizer");
@@ -400,466 +786,26 @@ void MainWindow::writeSettings()
     settings.setValue("windowState", saveState());
 }
 
-void MainWindow::closeEvent(QCloseEvent *event)
+// UI state methods
+void MainWindow::setDirty(bool dirty)
 {
+    if (isDirty != dirty) {
+        isDirty = dirty;
+        updateWindowTitle();
+        saveAction->setEnabled(isDirty);
+    }
+}
+
+void MainWindow::updateWindowTitle()
+{
+    QString title = turingMachine->getName().c_str();
+    if (title.isEmpty()) {
+        title = "Untitled";
+    }
+
     if (isDirty) {
-        QMessageBox::StandardButton reply = QMessageBox::question(
-            this, tr("Unsaved Changes"),
-            tr("You have unsaved changes. Do you want to save before closing?"),
-            QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel);
-
-        if (reply == QMessageBox::Save) {
-            saveMachine();
-            if (isDirty) {
-                // User canceled save operation
-                event->ignore();
-                return;
-            }
-        } else if (reply == QMessageBox::Cancel) {
-            event->ignore();
-            return;
-        }
+        title += " *";
     }
 
-    writeSettings();
-    event->accept();
-}
-
-void MainWindow::newMachine()
-{
-    // Check for unsaved changes
-    if (isDirty) {
-        QMessageBox::StandardButton reply = QMessageBox::question(
-            this, tr("Unsaved Changes"),
-            tr("You have unsaved changes. Do you want to save before creating a new machine?"),
-            QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel);
-
-        if (reply == QMessageBox::Save) {
-            saveMachine();
-            if (isDirty) {
-                // If still dirty, user canceled save operation
-                return;
-            }
-        } else if (reply == QMessageBox::Cancel) {
-            return;
-        }
-    }
-
-    // Create a new Turing Machine
-    turingMachine = std::make_unique<TuringMachine>("Untitled");
-
-    // Update tape-related widgets
-    tapeWidget->setTape(turingMachine->getTape());
-    tapeControlWidget->setTape(turingMachine->getTape());
-    tapeControlWidget->resetTape();
-
-    // Find and update states widget
-    StatesListWidget* statesWidget = qobject_cast<StatesListWidget*>(statesDock->widget());
-    if (statesWidget) {
-        statesWidget->setMachine(turingMachine.get());
-    }
-
-    // Find and update transitions widget
-    TransitionsListWidget* transitionsWidget = qobject_cast<TransitionsListWidget*>(transitionsDock->widget());
-    if (transitionsWidget) {
-        transitionsWidget->setMachine(turingMachine.get());
-    }
-
-    if (propertiesEditor) {
-        propertiesEditor->setMachine(turingMachine.get());
-    }
-
-    // Reset UI state
-    runAction->setEnabled(true);
-    pauseAction->setEnabled(false);
-    stepForwardAction->setEnabled(true);
-    stepBackwardAction->setEnabled(false);
-
-    // Reset the current file name
-    currentFileName.clear();
-
-    // Clear dirty flag
-    setDirty(false);
-
-    statusBar()->showMessage(tr("Created new machine"), 2000);
-}
-
-void MainWindow::openMachine()
-{
-    // Check for unsaved changes
-    if (isDirty) {
-        QMessageBox::StandardButton reply = QMessageBox::question(
-            this, tr("Unsaved Changes"),
-            tr("You have unsaved changes. Do you want to save before opening another machine?"),
-            QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel);
-
-        if (reply == QMessageBox::Save) {
-            saveMachine();
-            if (isDirty) {
-                // If still dirty, user canceled save operation
-                return;
-            }
-        } else if (reply == QMessageBox::Cancel) {
-            return;
-        }
-    }
-
-    QString fileName = QFileDialog::getOpenFileName(this,
-        tr("Open Turing Machine"), "",
-        tr("Turing Machine Files (*.tm);;All Files (*)"));
-
-    if (fileName.isEmpty()) return;
-
-    QFile file(fileName);
-    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
-        QMessageBox::warning(this, tr("Error"), tr("Could not open file."));
-        return;
-    }
-
-    QTextStream in(&file);
-    std::string jsonStr = in.readAll().toStdString();
-    file.close();
-
-    try {
-        // Create new machine from JSON
-        auto loadedMachine = TuringMachine::fromJson(jsonStr);
-        if (!loadedMachine) {
-            throw std::runtime_error("Failed to create machine from file");
-        }
-
-        // Replace current machine with loaded one
-        turingMachine = std::move(loadedMachine);
-
-        // Set current file name
-        currentFileName = fileName;
-
-        // Update tape-related widgets
-        tapeWidget->setTape(turingMachine->getTape());
-        tapeControlWidget->setTape(turingMachine->getTape());
-        tapeControlWidget->resetTape();
-
-        // Find and update states widget
-        StatesListWidget* statesWidget = qobject_cast<StatesListWidget*>(statesDock->widget());
-        if (statesWidget) {
-            statesWidget->setMachine(turingMachine.get());
-        }
-
-        // Find and update transitions widget
-        TransitionsListWidget* transitionsWidget = qobject_cast<TransitionsListWidget*>(transitionsDock->widget());
-        if (transitionsWidget) {
-            transitionsWidget->setMachine(turingMachine.get());
-        }
-
-        if (propertiesEditor) {
-            propertiesEditor->setMachine(turingMachine.get());
-        }
-
-        // Update UI state
-        runAction->setEnabled(true);
-        pauseAction->setEnabled(false);
-        stepForwardAction->setEnabled(true);
-        stepBackwardAction->setEnabled(turingMachine->canStepBackward());
-
-        // Clear dirty flag
-        setDirty(false);
-
-        statusBar()->showMessage(tr("Opened %1").arg(fileName), 2000);
-    } catch (const std::exception& e) {
-        QMessageBox::warning(this, tr("Error"), tr("Invalid file format: %1").arg(e.what()));
-
-        // Create a new machine in case of error
-        turingMachine = std::make_unique<TuringMachine>("Untitled");
-        currentFileName.clear();
-
-        // Update UI with the new empty machine
-        tapeWidget->setTape(turingMachine->getTape());
-        tapeControlWidget->setTape(turingMachine->getTape());
-        tapeControlWidget->resetTape();
-
-        StatesListWidget* statesWidget = qobject_cast<StatesListWidget*>(statesDock->widget());
-        if (statesWidget) {
-            statesWidget->setMachine(turingMachine.get());
-        }
-
-        TransitionsListWidget* transitionsWidget = qobject_cast<TransitionsListWidget*>(transitionsDock->widget());
-        if (transitionsWidget) {
-            transitionsWidget->setMachine(turingMachine.get());
-        }
-
-        // Clear dirty flag
-        setDirty(false);
-    }
-}
-
-// Update the save methods to clear dirty flag
-void MainWindow::saveMachine()
-{
-    if (currentFileName.isEmpty()) {
-        saveAsOperation();
-        return;
-    }
-
-    QFile file(currentFileName);
-    if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
-        QMessageBox::warning(this, tr("Error"), tr("Could not save file."));
-        return;
-    }
-
-    // Get JSON representation of the machine
-    std::string jsonStr = turingMachine->toJson();
-    qDebug() << "JSON to save:" << QString::fromStdString(jsonStr);
-
-    // Write to file
-    QTextStream out(&file);
-    out << QString::fromStdString(jsonStr);
-    file.close();
-
-    // Clear dirty flag
-    setDirty(false);
-
-    statusBar()->showMessage(tr("Machine saved to %1").arg(currentFileName), 2000);
-}
-
-void MainWindow::saveAsOperation()
-{
-    QString fileName = QFileDialog::getSaveFileName(this,
-        tr("Save Turing Machine"), "",
-        tr("Turing Machine Files (*.tm);;All Files (*)"));
-
-    if (fileName.isEmpty()) return;
-
-    // Add .tm extension if needed
-    if (!fileName.endsWith(".tm", Qt::CaseInsensitive)) {
-        fileName += ".tm";
-    }
-
-    QFile file(fileName);
-    if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
-        QMessageBox::warning(this, tr("Error"), tr("Could not save file."));
-        return;
-    }
-
-    // Get JSON representation of the machine
-    std::string jsonStr = turingMachine->toJson();
-    qDebug() << "JSON to save:" << QString::fromStdString(jsonStr);
-
-    // Write to file
-    QTextStream out(&file);
-    out << QString::fromStdString(jsonStr);
-    file.close();
-
-    currentFileName = fileName;
-
-    // Clear dirty flag
-    setDirty(false);
-
-    statusBar()->showMessage(tr("Saved as %1").arg(fileName), 2000);
-}
-
-void MainWindow::editPreferences()
-{
-    PreferencesDialog dialog(simulationSpeed, this);
-    if (dialog.exec() == QDialog::Accepted) {
-        simulationSpeed = dialog.getSimulationSpeed();
-        if (simulationTimer->isActive()) {
-            simulationTimer->setInterval(simulationSpeed);
-        }
-        statusBar()->showMessage(tr("Preferences updated"), 2000);
-    }
-}
-
-// Simulation menu slots
-void MainWindow::runSimulation()
-{
-    if (turingMachine->getStatus() == ExecutionStatus::HALTED_ACCEPT ||
-        turingMachine->getStatus() == ExecutionStatus::HALTED_REJECT ||
-        turingMachine->getStatus() == ExecutionStatus::ERROR) {
-        statusBar()->showMessage(tr("Cannot run - machine has halted"), 2000);
-        return;
-    }
-
-    // Disable interactive mode during simulation
-    tapeWidget->setInteractiveMode(false);
-    if (tapeControlWidget) {
-        QCheckBox* interactiveModeCheckbox = tapeControlWidget->findChild<QCheckBox*>();
-        if (interactiveModeCheckbox) {
-            interactiveModeCheckbox->setChecked(false);
-            interactiveModeCheckbox->setEnabled(false);
-        }
-    }
-
-    // Update UI state
-    runAction->setEnabled(false);
-    pauseAction->setEnabled(true);
-    stepForwardAction->setEnabled(false);
-    stepBackwardAction->setEnabled(false);
-    resetAction->setEnabled(true);
-
-    // Start the simulation
-    simulationTimer->start(simulationSpeed);
-    statusBar()->showMessage(tr("Simulation running..."));
-}
-
-// Re-enable interactive mode when simulation is paused or reset
-void MainWindow::pauseSimulation()
-{
-    simulationTimer->stop();
-
-    // Re-enable interactive mode
-    if (tapeControlWidget) {
-        QCheckBox* interactiveModeCheckbox = tapeControlWidget->findChild<QCheckBox*>();
-        if (interactiveModeCheckbox) {
-            interactiveModeCheckbox->setEnabled(true);
-        }
-    }
-
-    runAction->setEnabled(true);
-    pauseAction->setEnabled(false);
-    stepForwardAction->setEnabled(true);
-    stepBackwardAction->setEnabled(turingMachine->canStepBackward());
-
-    statusBar()->showMessage(tr("Simulation paused"), 2000);
-}
-
-// Also update the resetSimulation method
-void MainWindow::resetSimulation()
-{
-    simulationTimer->stop();
-    turingMachine->reset();
-    tapeWidget->updateTapeDisplay();
-
-    // Re-enable interactive mode
-    tapeWidget->setInteractiveMode(true);
-    if (tapeControlWidget) {
-        QCheckBox* interactiveModeCheckbox = tapeControlWidget->findChild<QCheckBox*>();
-        if (interactiveModeCheckbox) {
-            interactiveModeCheckbox->setChecked(true);
-            interactiveModeCheckbox->setEnabled(true);
-        }
-    }
-
-    StatesListWidget* statesWidget = qobject_cast<StatesListWidget*>(statesDock->widget());
-    if (statesWidget) {
-        statesWidget->highlightCurrentState(turingMachine->getCurrentState());
-    }
-
-    runAction->setEnabled(true);
-    pauseAction->setEnabled(false);
-    stepForwardAction->setEnabled(true);
-    stepBackwardAction->setEnabled(false);
-
-    statusBar()->showMessage(tr("Simulation reset"), 2000);
-}
-
-void MainWindow::stepForward()
-{
-    int oldHeadPosition = turingMachine->getTape()->getHeadPosition();
-
-    if (turingMachine->step()) {
-        // Mark as dirty if the machine was modified
-        setDirty();
-
-        int newHeadPosition = turingMachine->getTape()->getHeadPosition();
-        if (newHeadPosition > oldHeadPosition) {
-            tapeWidget->animateHeadMovement(true);
-        } else if (newHeadPosition < oldHeadPosition) {
-            tapeWidget->animateHeadMovement(false);
-        } else {
-            tapeWidget->updateTapeDisplay(); // This will now ensure head is visible
-        }
-
-        StatesListWidget* statesWidget = qobject_cast<StatesListWidget*>(statesDock->widget());
-        if (statesWidget) {
-            statesWidget->highlightCurrentState(turingMachine->getCurrentState());
-        }
-
-        stepBackwardAction->setEnabled(true);
-        statusBar()->showMessage(tr("Running - Step %1 (State: %2)")
-            .arg(turingMachine->getStepCount())
-            .arg(QString::fromStdString(turingMachine->getCurrentState())));
-    } else {
-        simulationTimer->stop(); // Stop if halted
-
-        ExecutionStatus status = turingMachine->getStatus();
-        QString message;
-        switch (status) {
-            case ExecutionStatus::HALTED_ACCEPT:
-                message = tr("Halted - Accept State (Step %1)")
-                    .arg(turingMachine->getStepCount());
-            break;
-            case ExecutionStatus::HALTED_REJECT:
-                message = tr("Halted - Reject State (Step %1)")
-                    .arg(turingMachine->getStepCount());
-            break;
-            case ExecutionStatus::ERROR:
-                message = tr("Halted - No valid transition (Step %1)")
-                    .arg(turingMachine->getStepCount());
-            break;
-            default:
-                message = tr("Halted unexpectedly (Step %1)")
-                    .arg(turingMachine->getStepCount());
-        }
-
-        StatesListWidget* statesWidget = qobject_cast<StatesListWidget*>(statesDock->widget());
-        if (statesWidget) {
-            statesWidget->highlightCurrentState(turingMachine->getCurrentState());
-        }
-
-        runAction->setEnabled(false);
-        pauseAction->setEnabled(false);
-        stepForwardAction->setEnabled(false);
-        stepBackwardAction->setEnabled(turingMachine->canStepBackward());
-        statusBar()->showMessage(message);
-    }
-}
-
-void MainWindow::stepBackward()
-{
-    int oldHeadPosition = turingMachine->getTape()->getHeadPosition();
-
-    if (turingMachine->stepBackward()) {
-        int newHeadPosition = turingMachine->getTape()->getHeadPosition();
-        if (newHeadPosition > oldHeadPosition) {
-            tapeWidget->animateHeadMovement(true);
-        } else if (newHeadPosition < oldHeadPosition) {
-            tapeWidget->animateHeadMovement(false);
-        } else {
-            tapeWidget->updateTapeDisplay(); // This will now ensure head is visible
-        }
-
-        StatesListWidget* statesWidget = qobject_cast<StatesListWidget*>(statesDock->widget());
-        if (statesWidget) {
-            statesWidget->highlightCurrentState(turingMachine->getCurrentState());
-        }
-
-        statusBar()->showMessage(tr("Step %1 (State: %2)")
-            .arg(turingMachine->getStepCount())
-            .arg(QString::fromStdString(turingMachine->getCurrentState())));
-        stepBackwardAction->setEnabled(turingMachine->canStepBackward());
-    } else {
-        statusBar()->showMessage(tr("Cannot step backward further"), 2000);
-        stepBackwardAction->setEnabled(false);
-    }
-}
-
-// Help menu slots
-void MainWindow::showAboutDialog()
-{
-    QMessageBox::about(this, tr("About Turing Machine Visualizer"),
-        tr("<h2>Turing Machine Visualizer</h2>"
-           "<p>Version 0.1</p>"
-           "<p>A visual simulator for Turing machines.</p>"
-           "<p>Created by Your Name</p>"));
-}
-
-void MainWindow::showHelpContents()
-{
-    QMessageBox::information(this, tr("Help Contents"),
-        tr("<h2>Turing Machine Visualizer Help</h2>"
-           "<p><b>File Menu:</b> Create, open, and save machines.</p>"
-           "<p><b>Simulation Menu:</b> Run, pause, step through, or reset the simulation.</p>"
-           "<p><b>Tape Controls:</b> Set initial tape content and adjust speed.</p>"
-           "<p><b>States/Transitions:</b> Add, edit, or remove states and transitions.</p>"
-           "<p>For more details, see the project documentation.</p>"));
-    statusBar()->showMessage(tr("Help contents opened"), 2000);
+    setWindowTitle(title + " - Turing Machine Visualizer");
 }

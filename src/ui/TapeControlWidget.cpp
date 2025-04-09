@@ -1,41 +1,50 @@
 #include "TapeControlWidget.h"
+
+// Qt includes
 #include <QHBoxLayout>
 #include <QVBoxLayout>
 #include <QGroupBox>
 #include <QIcon>
+#include <QLineEdit>
+#include <QLabel>
+#include <QPushButton>
+#include <QToolButton>
+#include <QSpinBox>
+#include <QSlider>
+#include <QCheckBox>
+
+// Project includes
+#include "../model/Tape.h"
+#include "TapeWidget.h"
 
 TapeControlWidget::TapeControlWidget(Tape* tape, TapeWidget* tapeWidget, QWidget *parent)
     : QWidget(parent), m_tape(tape), m_tapeWidget(tapeWidget)
 {
     setupUI();
     updateCurrentTapeLabel();
-
-    // Connect to tape modification signal from TapeWidget
     connect(m_tapeWidget, &TapeWidget::tapeModified, this, &TapeControlWidget::onTapeModified);
 }
 
 void TapeControlWidget::setTape(Tape* tape)
 {
     m_tape = tape;
-    resetTape(); // Reset immediately to sync with the new tape
+    resetTape();
 }
 
 void TapeControlWidget::setupUI()
 {
     QVBoxLayout* mainLayout = new QVBoxLayout(this);
-    
-    // Create tape content input area
+
+    // Tape content input group
     QGroupBox* inputGroupBox = new QGroupBox(tr("Tape Content"));
     QVBoxLayout* inputLayout = new QVBoxLayout(inputGroupBox);
-    
-    // Tape content input
+
     QHBoxLayout* tapeContentLayout = new QHBoxLayout();
     m_tapeContentEdit = new QLineEdit(this);
     m_tapeContentEdit->setPlaceholderText(tr("Enter tape content..."));
     tapeContentLayout->addWidget(new QLabel(tr("Content:")));
     tapeContentLayout->addWidget(m_tapeContentEdit);
-    
-    // Head position input
+
     QHBoxLayout* headPositionLayout = new QHBoxLayout();
     m_initialHeadPositionSpin = new QSpinBox(this);
     m_initialHeadPositionSpin->setMinimum(0);
@@ -44,8 +53,7 @@ void TapeControlWidget::setupUI()
     headPositionLayout->addWidget(new QLabel(tr("Initial Head Position:")));
     headPositionLayout->addWidget(m_initialHeadPositionSpin);
     headPositionLayout->addStretch();
-    
-    // Set and reset buttons
+
     QHBoxLayout* buttonLayout = new QHBoxLayout();
     m_setTapeButton = new QPushButton(tr("Set Tape"), this);
     m_resetTapeButton = new QPushButton(tr("Reset Tape"), this);
@@ -53,30 +61,26 @@ void TapeControlWidget::setupUI()
     connect(m_resetTapeButton, &QPushButton::clicked, this, &TapeControlWidget::resetTape);
     buttonLayout->addWidget(m_setTapeButton);
     buttonLayout->addWidget(m_resetTapeButton);
-    
-    // Add layouts to input group
+
     inputLayout->addLayout(tapeContentLayout);
     inputLayout->addLayout(headPositionLayout);
     inputLayout->addLayout(buttonLayout);
-    
-    // Create tape control area
+
+    // Tape controls group
     QGroupBox* controlGroupBox = new QGroupBox(tr("Tape Controls"));
     QVBoxLayout* controlLayout = new QVBoxLayout(controlGroupBox);
-    
-    // Add interactive mode toggle
+
     m_interactiveModeCheckbox = new QCheckBox(tr("Interactive Mode (click to move head, double-click to edit)"), this);
     m_interactiveModeCheckbox->setChecked(m_tapeWidget->isInteractiveMode());
     connect(m_interactiveModeCheckbox, &QCheckBox::toggled, this, &TapeControlWidget::toggleInteractiveMode);
     controlLayout->addWidget(m_interactiveModeCheckbox);
 
-    // Current tape content display
     m_currentTapeLabel = new QLabel(this);
     m_currentTapeLabel->setAlignment(Qt::AlignCenter);
     m_currentTapeLabel->setFrameStyle(QFrame::Panel | QFrame::Sunken);
     m_currentTapeLabel->setMinimumHeight(30);
     controlLayout->addWidget(m_currentTapeLabel);
 
-    // Shift buttons
     QHBoxLayout* shiftLayout = new QHBoxLayout();
     m_shiftLeftButton = new QToolButton(this);
     m_shiftRightButton = new QToolButton(this);
@@ -92,7 +96,6 @@ void TapeControlWidget::setupUI()
     shiftLayout->addStretch();
     controlLayout->addLayout(shiftLayout);
 
-    // Zoom controls
     QHBoxLayout* zoomLayout = new QHBoxLayout();
     QPushButton* zoomInButton = new QPushButton(tr("+"), this);
     QPushButton* zoomOutButton = new QPushButton(tr("-"), this);
@@ -109,8 +112,8 @@ void TapeControlWidget::setupUI()
     QHBoxLayout* speedLayout = new QHBoxLayout();
     m_speedLabel = new QLabel(tr("Speed (ms/step):"), this);
     m_speedSlider = new QSlider(Qt::Horizontal, this);
-    m_speedSlider->setRange(50, 1000); // 50ms to 1000ms
-    m_speedSlider->setValue(500);      // Default 500ms
+    m_speedSlider->setRange(50, 1000);
+    m_speedSlider->setValue(500);
     m_speedSlider->setTickPosition(QSlider::TicksBelow);
     m_speedSlider->setTickInterval(50);
     connect(m_speedSlider, &QSlider::valueChanged, this, [this](int value) {
@@ -120,13 +123,11 @@ void TapeControlWidget::setupUI()
     speedLayout->addWidget(m_speedSlider);
     controlLayout->addLayout(speedLayout);
 
-    // Add groups to main layout
     mainLayout->addWidget(inputGroupBox);
     mainLayout->addWidget(controlGroupBox);
     mainLayout->addStretch();
 }
 
-// Add the interactive mode toggle handler
 void TapeControlWidget::toggleInteractiveMode(bool enabled)
 {
     if (m_tapeWidget) {
@@ -134,7 +135,6 @@ void TapeControlWidget::toggleInteractiveMode(bool enabled)
     }
 }
 
-// Add handler for tape modifications
 void TapeControlWidget::onTapeModified()
 {
     updateCurrentTapeLabel();
@@ -156,11 +156,11 @@ void TapeControlWidget::setTapeContent()
     if (m_tape) {
         QString content = m_tapeContentEdit->text();
         int headPos = m_initialHeadPositionSpin->value();
-        
+
         m_tape->reset();
         m_tape->setInitialContent(content.toStdString());
         m_tape->setHeadPosition(headPos);
-        
+
         m_tapeWidget->updateTapeDisplay();
         updateCurrentTapeLabel();
         emit tapeContentChanged();
@@ -170,7 +170,6 @@ void TapeControlWidget::setTapeContent()
 void TapeControlWidget::shiftLeft()
 {
     if (m_tape) {
-        // Move head left (showing animation)
         m_tape->moveLeft();
         m_tapeWidget->animateHeadMovement(false);
         updateCurrentTapeLabel();
@@ -180,7 +179,6 @@ void TapeControlWidget::shiftLeft()
 void TapeControlWidget::shiftRight()
 {
     if (m_tape) {
-        // Move head right (showing animation)
         m_tape->moveRight();
         m_tapeWidget->animateHeadMovement(true);
         updateCurrentTapeLabel();
