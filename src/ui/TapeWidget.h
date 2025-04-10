@@ -42,7 +42,7 @@ public:
     void resetZoom();
 
 signals:
-    void cellValueChanged(int position, char newValue);
+    void cellValueChanged(int position, const std::string& newValue); // Changed to std::string
     void headPositionChanged(int newPosition);
     void tapeModified();
 
@@ -84,7 +84,7 @@ private:
     void moveHeadToCell(int cellIndex);
 
     // Drawing methods
-    void drawCell(QPainter &painter, int cellIndex, const QRect &rect, char symbol);
+    void drawCell(QPainter &painter, int cellIndex, const QRect &rect, const std::string& symbols); // Changed to std::string
     void drawHead(QPainter &painter);
     void drawGrid(QPainter &painter);
 };

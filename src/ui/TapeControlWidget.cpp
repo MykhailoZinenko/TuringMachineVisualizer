@@ -112,7 +112,7 @@ void TapeControlWidget::setupUI()
     QHBoxLayout* speedLayout = new QHBoxLayout();
     m_speedLabel = new QLabel(tr("Speed (ms/step):"), this);
     m_speedSlider = new QSlider(Qt::Horizontal, this);
-    m_speedSlider->setRange(50, 1000);
+    m_speedSlider->setRange(0, 1000);
     m_speedSlider->setValue(500);
     m_speedSlider->setTickPosition(QSlider::TicksBelow);
     m_speedSlider->setTickInterval(50);

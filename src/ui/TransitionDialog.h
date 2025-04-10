@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QDialog>
+#include <string>
 
 // Forward declarations
 class QComboBox;
@@ -22,15 +23,15 @@ public:
 
     QString getFromState() const;
     QString getToState() const;
-    QChar getReadSymbol() const;
-    QChar getWriteSymbol() const;
+    QString getReadSymbol() const;  // Changed to QString
+    QString getWriteSymbol() const; // Changed to QString
     Direction getDirection() const;
 
 private:
     QComboBox *fromStateComboBox;
     QComboBox *toStateComboBox;
-    QLineEdit *readSymbolEdit;
-    QLineEdit *writeSymbolEdit;
+    QLineEdit *readSymbolEdit;    // Changed to support multi-symbols
+    QLineEdit *writeSymbolEdit;   // Changed to support multi-symbols
     QComboBox *directionComboBox;
     QDialogButtonBox *buttonBox;
 

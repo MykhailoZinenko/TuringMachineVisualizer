@@ -11,21 +11,21 @@ Tape::~Tape()
 {
 }
 
-char Tape::read() const
+std::string Tape::read() const
 {
     auto it = cells.find(headPosition);
     if (it != cells.end()) {
         return it->second;
     }
-    return blankSymbol;
+    return std::string(1, blankSymbol);
 }
 
-void Tape::write(char symbol)
+void Tape::write(const std::string& symbols)
 {
-    if (symbol == blankSymbol) {
+    if (symbols.empty() || symbols == std::string(1, blankSymbol)) {
         cells.erase(headPosition);
     } else {
-        cells[headPosition] = symbol;
+        cells[headPosition] = symbols;
     }
 
     updateBounds(headPosition);
@@ -64,13 +64,18 @@ char Tape::getBlankSymbol() const
     return blankSymbol;
 }
 
+std::string Tape::getBlankSymbolAsString() const
+{
+    return std::string(1, blankSymbol);
+}
+
 void Tape::setInitialContent(const std::string& content)
 {
     reset();
 
     for (size_t i = 0; i < content.length(); ++i) {
         if (content[i] != blankSymbol) {
-            cells[i] = content[i];
+            cells[i] = std::string(1, content[i]);
             updateBounds(i);
         }
     }
@@ -94,15 +99,18 @@ std::string Tape::getCurrentContent(int windowSize) const
     return result;
 }
 
-std::vector<std::pair<int, char>> Tape::getVisiblePortion(int firstCellIndex, int count) const
+std::vector<std::pair<int, std::string>> Tape::getVisiblePortion(int firstCellIndex, int count) const
 {
-    std::vector<std::pair<int, char>> result;
+    std::vector<std::pair<int, std::string>> result;
 
-    auto it = cells.find(firstCellIndex);
-    if (it != cells.end()) {
-        result.push_back(std::make_pair(firstCellIndex, it->second));
-    } else {
-        result.push_back(std::make_pair(firstCellIndex, blankSymbol));
+    for (int i = 0; i < count; ++i) {
+        int cellIndex = firstCellIndex + i;
+        auto it = cells.find(cellIndex);
+        if (it != cells.end()) {
+            result.push_back(std::make_pair(cellIndex, it->second));
+        } else {
+            result.push_back(std::make_pair(cellIndex, std::string(1, blankSymbol)));
+        }
     }
 
     return result;

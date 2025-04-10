@@ -23,7 +23,7 @@ public:
         void transitionAdded();
     void transitionEdited();
     void transitionRemoved();
-    void transitionSelected(const std::string& fromState, char readSymbol);
+    void transitionSelected(const std::string& fromState, const std::string& readSymbol);  // Changed to use std::string
 
     private slots:
         void addTransition();

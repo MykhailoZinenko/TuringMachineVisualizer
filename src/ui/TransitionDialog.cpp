@@ -31,11 +31,15 @@ TransitionDialog::TransitionDialog(TuringMachine* machine, QWidget *parent, Tran
     }
     formLayout->addRow(tr("&From State:"), fromStateComboBox);
 
-    // Read Symbol
+    // Read Symbol - now allows multiple characters
     readSymbolEdit = new QLineEdit(this);
-    readSymbolEdit->setMaxLength(1);
-    readSymbolEdit->setFixedWidth(30);
+    readSymbolEdit->setMaxLength(10); // Allow more symbols
     formLayout->addRow(tr("&Read Symbol:"), readSymbolEdit);
+
+    // Add a hint label for multi-symbol support
+    QLabel* readHintLabel = new QLabel(tr("Use 'Blank' for blank symbol, multiple symbols allowed"), this);
+    readHintLabel->setStyleSheet("color: gray; font-size: 11px;");
+    formLayout->addRow("", readHintLabel);
 
     // To State
     toStateComboBox = new QComboBox(this);
@@ -48,17 +52,21 @@ TransitionDialog::TransitionDialog(TuringMachine* machine, QWidget *parent, Tran
     }
     formLayout->addRow(tr("&To State:"), toStateComboBox);
 
-    // Write Symbol
+    // Write Symbol - now allows multiple characters
     writeSymbolEdit = new QLineEdit(this);
-    writeSymbolEdit->setMaxLength(1);
-    writeSymbolEdit->setFixedWidth(30);
+    writeSymbolEdit->setMaxLength(10); // Allow more symbols
     formLayout->addRow(tr("&Write Symbol:"), writeSymbolEdit);
+
+    // Add a hint label for multi-symbol support
+    QLabel* writeHintLabel = new QLabel(tr("Use 'Blank' for blank symbol, multiple symbols allowed"), this);
+    writeHintLabel->setStyleSheet("color: gray; font-size: 11px;");
+    formLayout->addRow("", writeHintLabel);
 
     // Direction
     directionComboBox = new QComboBox(this);
-    directionComboBox->addItem(tr("Left"), static_cast<int>(Direction::LEFT));
-    directionComboBox->addItem(tr("Right"), static_cast<int>(Direction::RIGHT));
-    directionComboBox->addItem(tr("Stay"), static_cast<int>(Direction::STAY));
+    directionComboBox->addItem(tr("Left (L)"), static_cast<int>(Direction::LEFT));
+    directionComboBox->addItem(tr("Right (R)"), static_cast<int>(Direction::RIGHT));
+    directionComboBox->addItem(tr("Stay (N)"), static_cast<int>(Direction::STAY));
     directionComboBox->setCurrentIndex(1);  // Default to RIGHT
     formLayout->addRow(tr("&Direction:"), directionComboBox);
 
@@ -79,14 +87,14 @@ TransitionDialog::TransitionDialog(TuringMachine* machine, QWidget *parent, Tran
             fromStateComboBox->setCurrentIndex(fromIndex);
         }
 
-        readSymbolEdit->setText(QString(existingTransition->getReadSymbol()));
+        readSymbolEdit->setText(QString::fromStdString(existingTransition->getReadSymbol()));
 
         int toIndex = toStateComboBox->findData(QString::fromStdString(existingTransition->getToState()));
         if (toIndex >= 0) {
             toStateComboBox->setCurrentIndex(toIndex);
         }
 
-        writeSymbolEdit->setText(QString(existingTransition->getWriteSymbol()));
+        writeSymbolEdit->setText(QString::fromStdString(existingTransition->getWriteSymbol()));
 
         int dirIndex = directionComboBox->findData(static_cast<int>(existingTransition->getDirection()));
         if (dirIndex >= 0) {
@@ -114,20 +122,28 @@ QString TransitionDialog::getToState() const
     return toStateComboBox->currentData().toString();
 }
 
-QChar TransitionDialog::getReadSymbol() const
+QString TransitionDialog::getReadSymbol() const
 {
-    if (readSymbolEdit->text().isEmpty()) {
-        return '_';
+    QString text = readSymbolEdit->text().trimmed();
+
+    // Convert "Blank" to blank symbol
+    if (text.toLower() == "blank") {
+        return "_";
     }
-    return readSymbolEdit->text().at(0);
+
+    return text.isEmpty() ? "_" : text;
 }
 
-QChar TransitionDialog::getWriteSymbol() const
+QString TransitionDialog::getWriteSymbol() const
 {
-    if (writeSymbolEdit->text().isEmpty()) {
-        return '_';
+    QString text = writeSymbolEdit->text().trimmed();
+
+    // Convert "Blank" to blank symbol
+    if (text.toLower() == "blank") {
+        return "_";
     }
-    return writeSymbolEdit->text().at(0);
+
+    return text.isEmpty() ? "_" : text;
 }
 
 Direction TransitionDialog::getDirection() const

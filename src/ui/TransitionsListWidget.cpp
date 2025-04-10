@@ -7,6 +7,7 @@
 #include <QVBoxLayout>
 #include <QHeaderView>
 #include <QMessageBox>
+#include <QVariant>
 
 // Project includes
 #include "../model/TuringMachine.h"
@@ -45,13 +46,13 @@ void TransitionsListWidget::refreshTransitionsList()
             QString::fromStdString(transition->getFromState())));
 
         transitionsTable->setItem(i, 1, new QTableWidgetItem(
-            QString(transition->getReadSymbol())));
+            QString::fromStdString(transition->getReadSymbol())));
 
         transitionsTable->setItem(i, 2, new QTableWidgetItem(
             QString::fromStdString(transition->getToState())));
 
         transitionsTable->setItem(i, 3, new QTableWidgetItem(
-            QString(transition->getWriteSymbol())));
+            QString::fromStdString(transition->getWriteSymbol())));
 
         QString dirText;
         switch (transition->getDirection()) {
@@ -67,10 +68,13 @@ void TransitionsListWidget::refreshTransitionsList()
         }
         transitionsTable->setItem(i, 4, new QTableWidgetItem(dirText));
 
+        // Store the transition key in user data
+        QStringList data;
+        data << QString::fromStdString(transition->getFromState())
+             << QString::fromStdString(transition->getReadSymbol());
+
         for (int col = 0; col < 5; ++col) {
-            transitionsTable->item(i, col)->setData(Qt::UserRole,
-                QStringList() << QString::fromStdString(transition->getFromState())
-                             << QString(transition->getReadSymbol()));
+            transitionsTable->item(i, col)->setData(Qt::UserRole, data);
         }
     }
 
@@ -94,7 +98,7 @@ void TransitionsListWidget::addTransition()
     TransitionDialog dialog(machine, this);
     if (dialog.exec() == QDialog::Accepted) {
         std::string fromState = dialog.getFromState().toStdString();
-        char readSymbol = dialog.getReadSymbol().toLatin1();
+        std::string readSymbol = dialog.getReadSymbol().toStdString();
 
         if (machine->getTransition(fromState, readSymbol)) {
             QMessageBox::warning(this, tr("Duplicate Transition"),
@@ -108,7 +112,7 @@ void TransitionsListWidget::addTransition()
             fromState,
             readSymbol,
             dialog.getToState().toStdString(),
-            dialog.getWriteSymbol().toLatin1(),
+            dialog.getWriteSymbol().toStdString(),
             dialog.getDirection()
         );
 
@@ -166,7 +170,7 @@ void TransitionsListWidget::editTransition()
     TransitionDialog dialog(machine, this, transition);
     if (dialog.exec() == QDialog::Accepted) {
         transition->setToState(dialog.getToState().toStdString());
-        transition->setWriteSymbol(dialog.getWriteSymbol().toLatin1());
+        transition->setWriteSymbol(dialog.getWriteSymbol().toStdString());
         transition->setDirection(dialog.getDirection());
 
         refreshTransitionsList();
@@ -187,12 +191,12 @@ void TransitionsListWidget::removeTransition()
     if (data.size() < 2) return;
 
     std::string fromState = data[0].toStdString();
-    char readSymbol = data[1].isEmpty() ? '_' : data[1].at(0).toLatin1();
+    std::string readSymbol = data[1].toStdString();
 
     QMessageBox::StandardButton reply = QMessageBox::question(this, tr("Confirm Deletion"),
         tr("Are you sure you want to delete the transition from state '%1' on symbol '%2'?")
             .arg(QString::fromStdString(fromState))
-            .arg(readSymbol),
+            .arg(QString::fromStdString(readSymbol)),
         QMessageBox::Yes | QMessageBox::No);
 
     if (reply == QMessageBox::Yes) {
@@ -229,7 +233,7 @@ Transition* TransitionsListWidget::getSelectedTransition()
     if (data.size() < 2) return nullptr;
 
     std::string fromState = data[0].toStdString();
-    char readSymbol = data[1].isEmpty() ? '_' : data[1].at(0).toLatin1();
+    std::string readSymbol = data[1].toStdString();
 
     return machine->getTransition(fromState, readSymbol);
 }
@@ -247,7 +251,7 @@ void TransitionsListWidget::onTransitionSelectionChanged()
     if (data.size() < 2) return;
 
     std::string fromState = data[0].toStdString();
-    char readSymbol = data[1].isEmpty() ? '_' : data[1].at(0).toLatin1();
+    std::string readSymbol = data[1].toStdString();
 
     emit transitionSelected(fromState, readSymbol);
 }

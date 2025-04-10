@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QWidget>
+#include <string>
 
 // Forward declarations
 class QLineEdit;

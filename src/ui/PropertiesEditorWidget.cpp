@@ -56,17 +56,20 @@ void PropertiesEditorWidget::selectState(const std::string& stateId)
     }
 }
 
-void PropertiesEditorWidget::selectTransition(const std::string& fromState, char readSymbol)
+void PropertiesEditorWidget::selectTransition(const std::string& fromState, const std::string& readSymbol)
 {
     if (!m_machine) return;
 
     m_selectedTransition = m_machine->getTransition(fromState, readSymbol);
     if (m_selectedTransition) {
         m_selectedState = nullptr;
+        m_selectedFromState = fromState;      // Store the fromState
+        m_selectedReadSymbol = readSymbol;    // Store the readSymbol
         m_currentMode = EditorMode::TransitionSelected;
         updateUIForTransition();
     }
 }
+
 
 // UI Setup methods
 void PropertiesEditorWidget::setupUI()
@@ -188,8 +191,13 @@ void PropertiesEditorWidget::setupTransitionEditor()
     formLayout->addRow(tr("To State:"), m_transToStateCombo);
 
     m_transWriteEdit = new QLineEdit(m_transitionEditorWidget);
-    m_transWriteEdit->setMaxLength(1);
+    m_transWriteEdit->setMaxLength(10);  // Allow multiple symbols
     formLayout->addRow(tr("Write Symbol:"), m_transWriteEdit);
+
+    // Add a hint label for multi-symbol support
+    QLabel* writeHintLabel = new QLabel(tr("Use 'Blank' for blank symbol, multiple symbols allowed"), m_transitionEditorWidget);
+    writeHintLabel->setStyleSheet("color: gray; font-size: 11px;");
+    formLayout->addRow("", writeHintLabel);
 
     m_transDirectionCombo = new QComboBox(m_transitionEditorWidget);
     m_transDirectionCombo->addItem(tr("Left"), static_cast<int>(Direction::LEFT));
@@ -272,11 +280,11 @@ void PropertiesEditorWidget::updateUIForTransition()
     }
 
     m_transFromLabel->setText(QString::fromStdString(m_selectedTransition->getFromState()));
-    m_transReadLabel->setText(QString(m_selectedTransition->getReadSymbol()));
+    m_transReadLabel->setText(QString::fromStdString(m_selectedTransition->getReadSymbol()));
 
     populateStateComboBox(m_transToStateCombo, m_selectedTransition->getToState());
 
-    m_transWriteEdit->setText(QString(m_selectedTransition->getWriteSymbol()));
+    m_transWriteEdit->setText(QString::fromStdString(m_selectedTransition->getWriteSymbol()));
 
     int dirIndex = m_transDirectionCombo->findData(static_cast<int>(m_selectedTransition->getDirection()));
     if (dirIndex >= 0) {
@@ -447,38 +455,42 @@ void PropertiesEditorWidget::updateTransitionProperties()
 {
     if (!m_selectedTransition) return;
 
-    std::string fromState = m_selectedTransition->getFromState();
-    char readSymbol = m_selectedTransition->getReadSymbol();
-
     std::string oldToState = m_selectedTransition->getToState();
-    char oldWriteSymbol = m_selectedTransition->getWriteSymbol();
+    std::string oldWriteSymbol = m_selectedTransition->getWriteSymbol();
     Direction oldDirection = m_selectedTransition->getDirection();
 
     std::string newToState = m_transToStateCombo->currentData().toString().toStdString();
-    
+
     QString writeText = m_transWriteEdit->text();
-    char newWriteSymbol = writeText.isEmpty() ? '_' : writeText.at(0).toLatin1();
-    
+    std::string newWriteSymbol;
+
+    // Handle special "Blank" text
+    if (writeText.toLower() == "blank") {
+        newWriteSymbol = "_";
+    } else {
+        newWriteSymbol = writeText.isEmpty() ? "_" : writeText.toStdString();
+    }
+
     Direction newDirection = static_cast<Direction>(m_transDirectionCombo->currentData().toInt());
-    
+
     bool changed = false;
-    
+
     if (newToState != oldToState) {
         m_selectedTransition->setToState(newToState);
         changed = true;
     }
-    
+
     if (newWriteSymbol != oldWriteSymbol) {
         m_selectedTransition->setWriteSymbol(newWriteSymbol);
         changed = true;
     }
-    
+
     if (newDirection != oldDirection) {
         m_selectedTransition->setDirection(newDirection);
         changed = true;
     }
-    
+
     if (changed) {
-        emit transitionPropertiesChanged(fromState, readSymbol);
+        emit transitionPropertiesChanged(m_selectedFromState, m_selectedReadSymbol);
     }
 }

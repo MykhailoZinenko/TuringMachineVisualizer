@@ -17,6 +17,7 @@
 #include <QGuiApplication>
 #include <QTimer>
 #include <QCheckBox>
+#include <QTabWidget>
 
 // Project includes
 #include "../model/TuringMachine.h"
@@ -26,6 +27,7 @@
 #include "TapeControlWidget.h"
 #include "PreferencesDialog.h"
 #include "PropertiesEditorWidget.h"
+#include "CodeEditorWidget.h"
 
 // Constructor & destructor
 MainWindow::MainWindow(QWidget *parent)
@@ -53,6 +55,99 @@ MainWindow::MainWindow(QWidget *parent)
 MainWindow::~MainWindow()
 {
     delete simulationTimer;
+}
+
+// Setup central widget with tabs
+void MainWindow::setupCentralWidget()
+{
+    // Create a tab widget as the central widget
+    tabWidget = new QTabWidget(this);
+    setCentralWidget(tabWidget);
+
+    // Create the visual representation tab
+    QWidget *visualTab = new QWidget(tabWidget);
+    QVBoxLayout *visualLayout = new QVBoxLayout(visualTab);
+
+    // Create tape widget and control widget for visual representation
+    tapeWidget = new TapeWidget(visualTab);
+    tapeWidget->setMinimumHeight(150);
+    visualLayout->addWidget(tapeWidget);
+
+    tapeControlWidget = new TapeControlWidget(turingMachine->getTape(), tapeWidget, visualTab);
+    visualLayout->addWidget(tapeControlWidget);
+
+    tapeWidget->setTape(turingMachine->getTape());
+
+    connect(tapeControlWidget, &TapeControlWidget::tapeContentChanged, this, &MainWindow::handleTapeContentChanged);
+    connect(tapeWidget, &TapeWidget::cellValueChanged, this, &MainWindow::onCellValueChanged);
+    connect(tapeWidget, &TapeWidget::headPositionChanged, this, &MainWindow::onHeadPositionChanged);
+
+    // Add the visual tab to the tab widget
+    tabWidget->addTab(visualTab, tr("Visual"));
+
+    // Create code editor tab
+    codeEditorWidget = new CodeEditorWidget(turingMachine.get(), this);
+    tabWidget->addTab(codeEditorWidget, tr("Code"));
+
+    // Connect code editor signals
+    connect(codeEditorWidget, &CodeEditorWidget::codeChanged, this, &MainWindow::handleCodeChanged);
+
+    // Connect tab change signal
+    connect(tabWidget, &QTabWidget::currentChanged, this, &MainWindow::handleTabChanged);
+}
+
+// Handle tab changes
+void MainWindow::handleTabChanged(int index)
+{
+    // Update the current representation based on the selected tab
+    if (index == 0) { // Visual tab
+        // Apply code changes to the model before updating the visual representation
+        if (codeEditorWidget) {
+            codeEditorWidget->updateMachineFromCode();
+        }
+        // Update visual representation from model
+        updateVisualFromModel();
+    } else if (index == 1) { // Code tab
+        // The code is the source of truth - we don't update it from the model
+        // The code stays as the user wrote it
+    }
+}
+
+// Update visual representation from model
+void MainWindow::updateVisualFromModel()
+{
+    // Refresh tape display
+    if (tapeWidget) {
+        tapeWidget->setTape(turingMachine->getTape());
+        tapeWidget->updateTapeDisplay();
+    }
+
+    // Refresh state and transition lists
+    if (statesDock && transitionsDock) {
+        StatesListWidget* statesWidget = qobject_cast<StatesListWidget*>(statesDock->widget());
+        if (statesWidget) {
+            statesWidget->setMachine(turingMachine.get());
+            statesWidget->refreshStatesList();
+        }
+
+        TransitionsListWidget* transitionsWidget = qobject_cast<TransitionsListWidget*>(transitionsDock->widget());
+        if (transitionsWidget) {
+            transitionsWidget->setMachine(turingMachine.get());
+            transitionsWidget->refreshTransitionsList();
+        }
+    }
+}
+
+// Handle code changes from code editor
+void MainWindow::handleCodeChanged()
+{
+    // The code editor has updated the model
+    setDirty(true);
+
+    // If we're on the visual tab, update it to reflect changes
+    if (tabWidget->currentIndex() == 0) {
+        updateVisualFromModel();
+    }
 }
 
 // Event handlers
@@ -102,18 +197,11 @@ void MainWindow::newMachine()
 
     turingMachine = std::make_unique<TuringMachine>("Untitled");
 
-    tapeWidget->setTape(turingMachine->getTape());
-    tapeControlWidget->setTape(turingMachine->getTape());
-    tapeControlWidget->resetTape();
+    // Update all views
+    updateVisualFromModel();
 
-    StatesListWidget* statesWidget = qobject_cast<StatesListWidget*>(statesDock->widget());
-    if (statesWidget) {
-        statesWidget->setMachine(turingMachine.get());
-    }
-
-    TransitionsListWidget* transitionsWidget = qobject_cast<TransitionsListWidget*>(transitionsDock->widget());
-    if (transitionsWidget) {
-        transitionsWidget->setMachine(turingMachine.get());
+    if (codeEditorWidget) {
+        codeEditorWidget->updateFromModel();
     }
 
     if (propertiesEditor) {
@@ -130,6 +218,8 @@ void MainWindow::newMachine()
 
     statusBar()->showMessage(tr("Created new machine"), 2000);
 }
+
+// Updated openMachine method for MainWindow.cpp
 
 void MainWindow::openMachine()
 {
@@ -174,18 +264,11 @@ void MainWindow::openMachine()
         turingMachine = std::move(loadedMachine);
         currentFileName = fileName;
 
-        tapeWidget->setTape(turingMachine->getTape());
-        tapeControlWidget->setTape(turingMachine->getTape());
-        tapeControlWidget->resetTape();
+        // Update all views
+        updateVisualFromModel();
 
-        StatesListWidget* statesWidget = qobject_cast<StatesListWidget*>(statesDock->widget());
-        if (statesWidget) {
-            statesWidget->setMachine(turingMachine.get());
-        }
-
-        TransitionsListWidget* transitionsWidget = qobject_cast<TransitionsListWidget*>(transitionsDock->widget());
-        if (transitionsWidget) {
-            transitionsWidget->setMachine(turingMachine.get());
+        if (codeEditorWidget) {
+            codeEditorWidget->updateFromModel();
         }
 
         if (propertiesEditor) {
@@ -206,18 +289,10 @@ void MainWindow::openMachine()
         turingMachine = std::make_unique<TuringMachine>("Untitled");
         currentFileName.clear();
 
-        tapeWidget->setTape(turingMachine->getTape());
-        tapeControlWidget->setTape(turingMachine->getTape());
-        tapeControlWidget->resetTape();
+        updateVisualFromModel();
 
-        StatesListWidget* statesWidget = qobject_cast<StatesListWidget*>(statesDock->widget());
-        if (statesWidget) {
-            statesWidget->setMachine(turingMachine.get());
-        }
-
-        TransitionsListWidget* transitionsWidget = qobject_cast<TransitionsListWidget*>(transitionsDock->widget());
-        if (transitionsWidget) {
-            transitionsWidget->setMachine(turingMachine.get());
+        if (codeEditorWidget) {
+            codeEditorWidget->updateFromModel();
         }
 
         setDirty(false);
@@ -471,6 +546,7 @@ void MainWindow::showHelpContents()
            "<p><b>Simulation Menu:</b> Run, pause, step through, or reset the simulation.</p>"
            "<p><b>Tape Controls:</b> Set initial tape content and adjust speed.</p>"
            "<p><b>States/Transitions:</b> Add, edit, or remove states and transitions.</p>"
+           "<p><b>Views:</b> Switch between Visual, Code, and Graph representations.</p>"
            "<p>For more details, see the project documentation.</p>"));
     statusBar()->showMessage(tr("Help contents opened"), 2000);
 }
@@ -479,16 +555,31 @@ void MainWindow::showHelpContents()
 void MainWindow::handleStateAdded(const std::string& stateId)
 {
     setDirty();
+
+    // Update other views if needed
+    if (tabWidget->currentIndex() == 1 && codeEditorWidget) {
+        codeEditorWidget->updateFromModel();
+    }
 }
 
 void MainWindow::handleStateEdited(const std::string& stateId)
 {
     setDirty();
+
+    // Update other views if needed
+    if (tabWidget->currentIndex() == 1 && codeEditorWidget) {
+        codeEditorWidget->updateFromModel();
+    }
 }
 
 void MainWindow::handleStateRemoved(const std::string& stateId)
 {
     setDirty();
+
+    // Update other views if needed
+    if (tabWidget->currentIndex() == 1 && codeEditorWidget) {
+        codeEditorWidget->updateFromModel();
+    }
 }
 
 void MainWindow::onStateSelected(const std::string& stateId)
@@ -501,19 +592,35 @@ void MainWindow::onStateSelected(const std::string& stateId)
 void MainWindow::handleTransitionAdded()
 {
     setDirty();
+
+    // If code editor exists, append the newly added transition
+    if (codeEditorWidget) {
+        // Find the newest transition
+        auto transitions = turingMachine->getAllTransitions();
+        if (!transitions.empty()) {
+            // Get the last transition (most recently added)
+            Transition* lastTransition = transitions.back();
+            if (lastTransition) {
+                // Append it to the code
+                codeEditorWidget->appendTransition(lastTransition);
+            }
+        }
+    }
 }
 
 void MainWindow::handleTransitionEdited()
 {
     setDirty();
+
 }
 
 void MainWindow::handleTransitionRemoved()
 {
     setDirty();
+
 }
 
-void MainWindow::onTransitionSelected(const std::string& fromState, char readSymbol)
+void MainWindow::onTransitionSelected(const std::string& fromState, const std::string& readSymbol)
 {
     if (propertiesEditor) {
         propertiesEditor->selectTransition(fromState, readSymbol);
@@ -525,6 +632,11 @@ void MainWindow::onMachinePropertiesChanged()
 {
     updateWindowTitle();
     setDirty();
+
+    // Update code editor if it's open
+    if (codeEditorWidget && tabWidget->currentIndex() == 1) {
+        codeEditorWidget->updateFromModel();
+    }
 }
 
 void MainWindow::onStatePropertiesChanged(const std::string& stateId)
@@ -536,9 +648,14 @@ void MainWindow::onStatePropertiesChanged(const std::string& stateId)
     }
 
     setDirty();
+
+    // Update code editor if it's open
+    if (codeEditorWidget && tabWidget->currentIndex() == 1) {
+        codeEditorWidget->updateFromModel();
+    }
 }
 
-void MainWindow::onTransitionPropertiesChanged(const std::string& fromState, char readSymbol)
+void MainWindow::onTransitionPropertiesChanged(const std::string& fromState, const std::string& readSymbol)
 {
     TransitionsListWidget* transitionsWidget = qobject_cast<TransitionsListWidget*>(transitionsDock->widget());
     if (transitionsWidget) {
@@ -554,12 +671,12 @@ void MainWindow::handleTapeContentChanged()
     setDirty();
 }
 
-void MainWindow::onCellValueChanged(int position, char newValue)
+void MainWindow::onCellValueChanged(int position, const std::string& newValue)
 {
     setDirty();
     statusBar()->showMessage(tr("Cell at position %1 changed to '%2'")
                             .arg(position)
-                            .arg(QChar(newValue)), 2000);
+                            .arg(QString::fromStdString(newValue)), 2000);
 }
 
 void MainWindow::onHeadPositionChanged(int newPosition)
@@ -687,27 +804,6 @@ void MainWindow::createToolBars()
 void MainWindow::createStatusBar()
 {
     statusBar()->showMessage(tr("Ready"));
-}
-
-void MainWindow::setupCentralWidget()
-{
-    QWidget *centralWidget = new QWidget(this);
-    setCentralWidget(centralWidget);
-
-    QVBoxLayout *layout = new QVBoxLayout(centralWidget);
-
-    tapeWidget = new TapeWidget(centralWidget);
-    tapeWidget->setMinimumHeight(150);
-    layout->addWidget(tapeWidget);
-
-    tapeControlWidget = new TapeControlWidget(turingMachine->getTape(), tapeWidget, centralWidget);
-    layout->addWidget(tapeControlWidget);
-
-    tapeWidget->setTape(turingMachine->getTape());
-
-    connect(tapeControlWidget, &TapeControlWidget::tapeContentChanged, this, &MainWindow::handleTapeContentChanged);
-    connect(tapeWidget, &TapeWidget::cellValueChanged, this, &MainWindow::onCellValueChanged);
-    connect(tapeWidget, &TapeWidget::headPositionChanged, this, &MainWindow::onHeadPositionChanged);
 }
 
 void MainWindow::createDockWindows()

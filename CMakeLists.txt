@@ -29,6 +29,7 @@ set(SOURCES
         src/model/TuringMachine.cpp
         src/ui/PreferencesDialog.cpp
         src/ui/PropertiesEditorWidget.cpp
+        src/ui/CodeEditorWidget.cpp
 )
 
 # Set header files
@@ -46,6 +47,7 @@ set(HEADERS
         src/model/TuringMachine.h
         src/ui/PreferencesDialog.h
         src/ui/PropertiesEditorWidget.h
+        src/ui/CodeEditorWidget.h
 )
 
 # Include directories

@@ -11,6 +11,7 @@ class QToolBar;
 class QStatusBar;
 class QDockWidget;
 class QTimer;
+class QTabWidget;
 
 class TuringMachine;
 class TapeWidget;
@@ -18,6 +19,7 @@ class TapeControlWidget;
 class StatesListWidget;
 class TransitionsListWidget;
 class PropertiesEditorWidget;
+class CodeEditorWidget;
 
 class MainWindow : public QMainWindow
 {
@@ -62,17 +64,21 @@ private slots:
     void handleTransitionAdded();
     void handleTransitionEdited();
     void handleTransitionRemoved();
-    void onTransitionSelected(const std::string& fromState, char readSymbol);
+    void onTransitionSelected(const std::string& fromState, const std::string& readSymbol);
 
     // Property changes
     void onMachinePropertiesChanged();
     void onStatePropertiesChanged(const std::string& stateId);
-    void onTransitionPropertiesChanged(const std::string& fromState, char readSymbol);
+    void onTransitionPropertiesChanged(const std::string& fromState, const std::string& readSymbol);
 
     // Tape interaction
     void handleTapeContentChanged();
-    void onCellValueChanged(int position, char newValue);
+    void onCellValueChanged(int position, const std::string& newValue);
     void onHeadPositionChanged(int newPosition);
+
+    // Tab-related slots
+    void handleTabChanged(int index);
+    void handleCodeChanged();
 
 private:
     // Core data
@@ -85,9 +91,11 @@ private:
     int simulationSpeed;
 
     // UI components - Widgets
+    QTabWidget* tabWidget;
     TapeWidget* tapeWidget;
     TapeControlWidget* tapeControlWidget;
     PropertiesEditorWidget* propertiesEditor;
+    CodeEditorWidget* codeEditorWidget;
 
     // UI components - Docks
     QDockWidget *statesDock;
@@ -135,4 +143,7 @@ private:
     // UI state methods
     void setDirty(bool dirty = true);
     void updateWindowTitle();
+
+    // New methods for tab support
+    void updateVisualFromModel();
 };

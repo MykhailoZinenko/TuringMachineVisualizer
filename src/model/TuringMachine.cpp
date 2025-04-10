@@ -127,27 +127,27 @@ void TuringMachine::setStartState(const std::string& id)
     }
 }
 
-// Transition management
-void TuringMachine::addTransition(const std::string& fromState, char readSymbol,
-                               const std::string& toState, char writeSymbol,
+// Transition management - updated to use strings instead of chars
+void TuringMachine::addTransition(const std::string& fromState, const std::string& readSymbol,
+                               const std::string& toState, const std::string& writeSymbol,
                                Direction moveDirection)
 {
     if (getState(fromState) && getState(toState)) {
-        std::pair<std::string, char> key(fromState, readSymbol);
+        std::pair<std::string, std::string> key(fromState, readSymbol);
         transitions[key] = std::make_unique<Transition>(
             fromState, readSymbol, toState, writeSymbol, moveDirection);
     }
 }
 
-void TuringMachine::removeTransition(const std::string& fromState, char readSymbol)
+void TuringMachine::removeTransition(const std::string& fromState, const std::string& readSymbol)
 {
-    std::pair<std::string, char> key(fromState, readSymbol);
+    std::pair<std::string, std::string> key(fromState, readSymbol);
     transitions.erase(key);
 }
 
-Transition* TuringMachine::getTransition(const std::string& fromState, char readSymbol)
+Transition* TuringMachine::getTransition(const std::string& fromState, const std::string& readSymbol)
 {
-    std::pair<std::string, char> key(fromState, readSymbol);
+    std::pair<std::string, std::string> key(fromState, readSymbol);
     auto it = transitions.find(key);
     if (it != transitions.end()) {
         return it->second.get();
@@ -225,11 +225,18 @@ bool TuringMachine::step()
         return false;
     }
 
-    char symbol = tape->read();
+    std::string symbol = tape->read();
     Transition* transition = getTransition(currentState, symbol);
 
     if (!transition) {
+        // Try with the blank symbol as a fallback
+        transition = getTransition(currentState, std::string(1, tape->getBlankSymbol()));
+    }
+
+    if (!transition) {
         status = ExecutionStatus::ERROR;
+        qDebug() << "Error: No transition found for state" << QString::fromStdString(currentState)
+                 << "and symbol" << QString::fromStdString(symbol);
         return false;
     }
 
@@ -347,9 +354,9 @@ std::string TuringMachine::toJson() const
     for (const auto& pair : transitions) {
         transitionsJson.push_back(json{
             {"fromState", pair.second->getFromState()},
-            {"readSymbol", std::string(1, pair.second->getReadSymbol())},
+            {"readSymbol", pair.second->getReadSymbol()},
             {"toState", pair.second->getToState()},
-            {"writeSymbol", std::string(1, pair.second->getWriteSymbol())},
+            {"writeSymbol", pair.second->getWriteSymbol()},
             {"direction", static_cast<int>(pair.second->getDirection())}
         });
     }
@@ -395,18 +402,45 @@ std::unique_ptr<TuringMachine> TuringMachine::fromJson(const std::string& jsonSt
             qWarning() << "No states array found in JSON";
         }
 
+        int transitionCount = 0;
         if (j.contains("transitions") && j["transitions"].is_array()) {
             qDebug() << "Found transitions array with" << j["transitions"].size() << "transitions";
 
             for (const auto& transJson : j["transitions"]) {
                 try {
                     std::string fromState = transJson["fromState"];
-                    char readSymbol = transJson["readSymbol"].get<std::string>()[0];
+                    std::string readSymbol;
+
+                    // Handle readSymbol which could be a string or a single character in older files
+                    if (transJson["readSymbol"].is_string()) {
+                        readSymbol = transJson["readSymbol"].get<std::string>();
+                    } else if (transJson["readSymbol"].is_number()) {
+                        // For backwards compatibility with older files that stored a char as a number
+                        char readChar = static_cast<char>(transJson["readSymbol"].get<int>());
+                        readSymbol = std::string(1, readChar);
+                    } else {
+                        // Default
+                        readSymbol = "_";
+                    }
+
                     std::string toState = transJson["toState"];
-                    char writeSymbol = transJson["writeSymbol"].get<std::string>()[0];
+                    std::string writeSymbol;
+
+                    // Handle writeSymbol which could be a string or a single character
+                    if (transJson["writeSymbol"].is_string()) {
+                        writeSymbol = transJson["writeSymbol"].get<std::string>();
+                    } else if (transJson["writeSymbol"].is_number()) {
+                        // For backwards compatibility
+                        char writeChar = static_cast<char>(transJson["writeSymbol"].get<int>());
+                        writeSymbol = std::string(1, writeChar);
+                    } else {
+                        // Default
+                        writeSymbol = "_";
+                    }
+
                     Direction direction = static_cast<Direction>(transJson["direction"].get<int>());
 
-                    qDebug() << "Adding transition from" << QString::fromStdString(fromState) << "on" << readSymbol;
+                    qDebug() << "Adding transition from" << QString::fromStdString(fromState) << "on" << QString::fromStdString(readSymbol);
 
                     machine->addTransition(
                         fromState,
@@ -415,6 +449,9 @@ std::unique_ptr<TuringMachine> TuringMachine::fromJson(const std::string& jsonSt
                         writeSymbol,
                         direction
                     );
+
+                    transitionCount++;
+                    qDebug() << "TuringMachine::addTransition" << transitionCount;
                 } catch (const std::exception& e) {
                     qWarning() << "Error restoring transition:" << e.what();
                 }
@@ -428,6 +465,10 @@ std::unique_ptr<TuringMachine> TuringMachine::fromJson(const std::string& jsonSt
 
         qDebug() << "Machine loaded with" << machine->getAllStates().size() << "states and"
                  << machine->getAllTransitions().size() << "transitions";
+
+        // Final check to ensure transitions are still there
+        auto allTransitions = machine->getAllTransitions();
+        qDebug() << "Turing Machine loaded::load" << allTransitions;
 
         return machine;
     } catch (const json::exception& e) {
@@ -446,13 +487,14 @@ ExecutionSnapshot TuringMachine::createSnapshot() const
     snapshot.currentState = currentState;
     snapshot.headPosition = tape->getHeadPosition();
 
+    // Get the tape content
     int left = tape->getLeftmostUsedPosition();
     int right = tape->getRightmostUsedPosition();
 
-    for (int i = left; i <= right; i++) {
-        auto cells = tape->getVisiblePortion(i - tape->getHeadPosition(), 1);
-        if (!cells.empty() && cells[0].second != tape->getBlankSymbol()) {
-            snapshot.tapeContent[cells[0].first] = cells[0].second;
+    auto visibleCells = tape->getVisiblePortion(left, right - left + 1);
+    for (const auto& cell : visibleCells) {
+        if (cell.second != std::string(1, tape->getBlankSymbol())) {
+            snapshot.tapeContent[cell.first] = cell.second;
         }
     }
 

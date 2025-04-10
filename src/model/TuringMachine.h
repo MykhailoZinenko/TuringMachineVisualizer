@@ -26,7 +26,7 @@ enum class ExecutionStatus {
 struct ExecutionSnapshot {
     std::string currentState;
     int headPosition;
-    std::map<int, char> tapeContent;
+    std::map<int, std::string> tapeContent;  // Changed to store strings
 
     bool operator==(const ExecutionSnapshot& other) const {
         return currentState == other.currentState &&
@@ -61,12 +61,12 @@ public:
     std::string getStartState() const;
     void setStartState(const std::string& id);
 
-    // Transition management
-    void addTransition(const std::string& fromState, char readSymbol,
-                       const std::string& toState, char writeSymbol,
+    // Transition management - updated to use strings instead of chars
+    void addTransition(const std::string& fromState, const std::string& readSymbol,
+                       const std::string& toState, const std::string& writeSymbol,
                        Direction moveDirection);
-    void removeTransition(const std::string& fromState, char readSymbol);
-    Transition* getTransition(const std::string& fromState, char readSymbol);
+    void removeTransition(const std::string& fromState, const std::string& readSymbol);
+    Transition* getTransition(const std::string& fromState, const std::string& readSymbol);
     std::vector<Transition*> getAllTransitions() const;
 
     // Tape management
@@ -97,7 +97,7 @@ private:
     std::string name;
     MachineType type;
     std::map<std::string, std::unique_ptr<State>> states;
-    std::map<std::pair<std::string, char>, std::unique_ptr<Transition>> transitions;
+    std::map<std::pair<std::string, std::string>, std::unique_ptr<Transition>> transitions;  // Changed key to use string
     std::unique_ptr<Tape> tape;
 
     std::string currentState;

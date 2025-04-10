@@ -131,17 +131,16 @@ void TapeWidget::paintEvent(QPaintEvent *event)
     int start = m_leftmostCell;
     int end = start + m_visibleCells;
 
-    for (int cellIndex = start; cellIndex < end; ++cellIndex) {
+    auto visibleCells = m_tape->getVisiblePortion(start, end - start);
+
+    for (const auto& cellPair : visibleCells) {
+        int cellIndex = cellPair.first;
+        const std::string& symbols = cellPair.second;
+
         QRect cellRect = getCellRect(cellIndex);
 
         if (cellRect.intersects(event->rect())) {
-            char symbol = '_';
-            auto cells = m_tape->getVisiblePortion(cellIndex, 1);
-            if (!cells.empty()) {
-                symbol = cells[0].second;
-            }
-
-            drawCell(painter, cellIndex, cellRect, symbol);
+            drawCell(painter, cellIndex, cellRect, symbols);
         }
     }
 
@@ -204,10 +203,10 @@ void TapeWidget::contextMenuEvent(QContextMenuEvent *event)
         if (m_tape) {
             int originalHeadPos = m_tape->getHeadPosition();
             m_tape->setHeadPosition(cellIndex);
-            m_tape->write(m_tape->getBlankSymbol());
+            m_tape->write(m_tape->getBlankSymbolAsString());
             m_tape->setHeadPosition(originalHeadPos);
             updateTapeDisplay();
-            emit cellValueChanged(cellIndex, m_tape->getBlankSymbol());
+            emit cellValueChanged(cellIndex, m_tape->getBlankSymbolAsString());
             emit tapeModified();
         }
     } else if (selectedAction == centerAction) {
@@ -319,9 +318,9 @@ void TapeWidget::editCellValue(int cellIndex)
 
     int originalHeadPos = m_tape->getHeadPosition();
     m_tape->setHeadPosition(cellIndex);
-    char currentSymbol = m_tape->read();
+    std::string currentSymbols = m_tape->read();
 
-    QString currentValue = (currentSymbol == m_tape->getBlankSymbol()) ? "" : QString(currentSymbol);
+    QString currentValue = (currentSymbols == m_tape->getBlankSymbolAsString()) ? "" : QString::fromStdString(currentSymbols);
 
     bool ok;
     QString newValue = QInputDialog::getText(this, tr("Edit Cell Value"),
@@ -330,17 +329,17 @@ void TapeWidget::editCellValue(int cellIndex)
                                            currentValue, &ok);
 
     if (ok) {
-        char newSymbol;
+        std::string newSymbols;
         if (newValue.isEmpty()) {
-            newSymbol = m_tape->getBlankSymbol();
+            newSymbols = m_tape->getBlankSymbolAsString();
         } else {
-            newSymbol = newValue.at(0).toLatin1();
+            newSymbols = newValue.toStdString();
         }
 
-        m_tape->write(newSymbol);
+        m_tape->write(newSymbols);
         m_tape->setHeadPosition(originalHeadPos);
         updateTapeDisplay();
-        emit cellValueChanged(cellIndex, newSymbol);
+        emit cellValueChanged(cellIndex, newSymbols);
         emit tapeModified();
     } else {
         m_tape->setHeadPosition(originalHeadPos);
@@ -363,7 +362,7 @@ void TapeWidget::moveHeadToCell(int cellIndex)
 }
 
 // Drawing methods
-void TapeWidget::drawCell(QPainter &painter, int cellIndex, const QRect &rect, char symbol)
+void TapeWidget::drawCell(QPainter &painter, int cellIndex, const QRect &rect, const std::string& symbols)
 {
     if (cellIndex == m_tape->getHeadPosition()) {
         painter.fillRect(rect, QColor(255, 235, 185));
@@ -374,27 +373,33 @@ void TapeWidget::drawCell(QPainter &painter, int cellIndex, const QRect &rect, c
     painter.setPen(QPen(QColor(180, 180, 180), 1));
     painter.drawRect(rect);
 
-    painter.setPen(Qt::black);
-    QFont font = painter.font();
-    font.setPointSize(14);
-    painter.setFont(font);
+    // Draw the symbols
+    if (!symbols.empty() && symbols != m_tape->getBlankSymbolAsString()) {
+        painter.setPen(Qt::black);
+        QFont font = painter.font();
+        font.setPointSize(14);
+        painter.setFont(font);
 
-    QString symbolStr(symbol);
+        QString symbolStr = QString::fromStdString(symbols);
 
-    QFontMetrics fm(font);
-    QRect textRect = fm.boundingRect(symbolStr);
-    painter.drawText(
-        rect.left() + (rect.width() - textRect.width()) / 2,
-        rect.top() + (rect.height() + fm.ascent() - fm.descent()) / 2,
-        symbolStr
-    );
+        QFontMetrics fm(font);
+        QRect textRect = fm.boundingRect(symbolStr);
+        painter.drawText(
+            rect.left() + (rect.width() - textRect.width()) / 2,
+            rect.top() + (rect.height() + fm.ascent() - fm.descent()) / 2,
+            symbolStr
+        );
+    }
 
-    font.setPointSize(8);
-    painter.setFont(font);
+    // Draw cell index at the bottom
+    QFont smallFont = painter.font();
+    smallFont.setPointSize(8);
+    painter.setFont(smallFont);
     painter.setPen(Qt::gray);
     QString indexStr = QString::number(cellIndex);
+    QFontMetrics smallFm(smallFont);
     painter.drawText(
-        rect.left() + (rect.width() - fm.horizontalAdvance(indexStr)) / 2,
+        rect.left() + (rect.width() - smallFm.horizontalAdvance(indexStr)) / 2,
         rect.bottom() - 5,
         indexStr
     );

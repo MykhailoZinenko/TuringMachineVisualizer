@@ -38,12 +38,12 @@ public:
     void setMachine(TuringMachine* machine);
     void clearSelection();
     void selectState(const std::string& stateId);
-    void selectTransition(const std::string& fromState, char readSymbol);
+    void selectTransition(const std::string& fromState, const std::string& readSymbol); // Changed to string
 
 signals:
     void machinePropertiesChanged();
     void statePropertiesChanged(const std::string& stateId);
-    void transitionPropertiesChanged(const std::string& fromState, char readSymbol);
+    void transitionPropertiesChanged(const std::string& fromState, const std::string& readSymbol); // Changed to string
 
 private slots:
     // Update slots
@@ -63,6 +63,8 @@ private:
     Transition* m_selectedTransition;
     EditorMode m_currentMode;
     QColor m_stateColor;
+    std::string m_selectedFromState;   // Store the fromState for the selected transition
+    std::string m_selectedReadSymbol;  // Store the readSymbol for the selected transition
 
     // UI components - Main
     QStackedWidget* m_stackedWidget;

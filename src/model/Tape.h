@@ -11,8 +11,8 @@ public:
     ~Tape();
 
     // Core operations
-    char read() const;
-    void write(char symbol);
+    std::string read() const;  // Changed to return string instead of char
+    void write(const std::string& symbols);  // Changed to accept string instead of char
     void moveLeft();
     void moveRight();
     void reset();
@@ -21,18 +21,19 @@ public:
     int getHeadPosition() const;
     void setHeadPosition(int position);
     char getBlankSymbol() const;
+    std::string getBlankSymbolAsString() const;
 
     // Content management
     void setInitialContent(const std::string& content);
     std::string getCurrentContent(int windowSize = 20) const;
 
     // Visualization support
-    std::vector<std::pair<int, char>> getVisiblePortion(int firstCellIndex, int count) const;
+    std::vector<std::pair<int, std::string>> getVisiblePortion(int firstCellIndex, int count) const;
     int getLeftmostUsedPosition() const;
     int getRightmostUsedPosition() const;
 
 private:
-    std::map<int, char> cells;  // Sparse representation
+    std::map<int, std::string> cells;  // Changed from char to string
     int headPosition;
     char blankSymbol;
     int leftmostUsed;
