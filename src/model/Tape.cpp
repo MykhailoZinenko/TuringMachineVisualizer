@@ -136,3 +136,26 @@ void Tape::updateBounds(int position)
     leftmostUsed = std::min(leftmostUsed, position);
     rightmostUsed = std::max(rightmostUsed, position);
 }
+
+// NEW: Method to get all non-blank cells for serialization
+std::map<int, std::string> Tape::getAllNonBlankCells() const
+{
+    std::map<int, std::string> result;
+    for (const auto& pair : cells) {
+        // Only include non-blank cells
+        if (pair.second != std::string(1, blankSymbol)) {
+            result[pair.first] = pair.second;
+        }
+    }
+    return result;
+}
+
+// NEW: Method to set content from cell map (for deserialization)
+void Tape::setContentFromMap(const std::map<int, std::string>& content)
+{
+    reset();
+    for (const auto& pair : content) {
+        cells[pair.first] = pair.second;
+        updateBounds(pair.first);
+    }
+}

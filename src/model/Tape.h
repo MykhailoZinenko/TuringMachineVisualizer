@@ -27,6 +27,10 @@ public:
     void setInitialContent(const std::string& content);
     std::string getCurrentContent(int windowSize = 20) const;
 
+    // NEW: Better serialization methods for saving/loading
+    std::map<int, std::string> getAllNonBlankCells() const;
+    void setContentFromMap(const std::map<int, std::string>& content);
+
     // Visualization support
     std::vector<std::pair<int, std::string>> getVisiblePortion(int firstCellIndex, int count) const;
     int getLeftmostUsedPosition() const;

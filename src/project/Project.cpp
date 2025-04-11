@@ -115,8 +115,21 @@ bool Project::saveToFile(const std::string& path)
         QJsonObject tapeJson;
         tapeJson["id"] = QString::fromStdString(tape->getId());
         tapeJson["name"] = QString::fromStdString(tape->getName());
-        tapeJson["content"] = QString::fromStdString(tape->getTape()->getCurrentContent());
+
+        // CHANGED: Save entire tape content with positions instead of just window
+        QJsonArray cellsArray;
+        auto cellsMap = tape->getTape()->getAllNonBlankCells();
+        for (const auto& cell : cellsMap) {
+            QJsonObject cellObj;
+            cellObj["pos"] = cell.first;
+            cellObj["val"] = QString::fromStdString(cell.second);
+            cellsArray.append(cellObj);
+        }
+        tapeJson["cells"] = cellsArray;
+
+        // Keep head position
         tapeJson["headPosition"] = tape->getTape()->getHeadPosition();
+
         tapesArray.append(tapeJson);
     }
     projectJson["tapes"] = tapesArray;
@@ -209,28 +222,42 @@ std::unique_ptr<Project> Project::loadFromFile(const std::string& path)
             // Create a new tape document
             auto tapeDoc = std::make_unique<TapeDocument>(project.get(), id, name);
             
-            // Set content and head position
-            if (tapeJson.contains("content")) {
+            // CHANGED: Load tape content from cell array with positions
+            if (tapeJson.contains("cells") && tapeJson["cells"].isArray()) {
+                QJsonArray cellsArray = tapeJson["cells"].toArray();
+                std::map<int, std::string> cellsMap;
+
+                for (const QJsonValue& cellValue : cellsArray) {
+                    QJsonObject cellObj = cellValue.toObject();
+                    int pos = cellObj["pos"].toInt();
+                    std::string val = cellObj["val"].toString().toStdString();
+                    cellsMap[pos] = val;
+                }
+
+                tapeDoc->getTape()->setContentFromMap(cellsMap);
+            } else if (tapeJson.contains("content")) {
+                // Fallback for backwards compatibility with old format
                 tapeDoc->getTape()->setInitialContent(tapeJson["content"].toString().toStdString());
             }
-            
+
+            // Set head position
             if (tapeJson.contains("headPosition")) {
                 tapeDoc->getTape()->setHeadPosition(tapeJson["headPosition"].toInt());
             }
-            
+
             project->m_tapeDocuments.push_back(std::move(tapeDoc));
         }
     }
-    
+
     // If no tapes were loaded, create a default one
     if (project->m_tapeDocuments.empty()) {
         project->createTape("Default Tape");
     }
-    
+
     // Set the file path
     project->setFilePath(path);
     project->setModified(false);
-    
+
     return project;
 }
 
