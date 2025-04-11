@@ -180,6 +180,15 @@ std::string TuringMachine::getTapeContent() const
     return tape->getCurrentContent(50);
 }
 
+void TuringMachine::setOriginalCode(const std::string& code) {
+    m_originalCode = code;
+}
+
+// Get the original code for displaying in the editor
+std::string TuringMachine::getOriginalCode() const {
+    return m_originalCode;
+}
+
 // Execution control
 void TuringMachine::reset()
 {
@@ -337,6 +346,7 @@ std::string TuringMachine::toJson() const
     j["type"] = static_cast<int>(type);
     j["currentState"] = currentState;
     j["tapeContent"] = tape->getCurrentContent();
+    j["originalCode"] = m_originalCode;  // Store the original code
 
     json statesJson = json::array();
     for (const auto& pair : states) {
@@ -363,6 +373,7 @@ std::string TuringMachine::toJson() const
     j["transitions"] = transitionsJson;
 
     qDebug() << "Saving machine with:" << states.size() << "states and" << transitions.size() << "transitions";
+    qDebug() << "Original code size:" << m_originalCode.size() << "bytes";
 
     return j.dump(4);
 }
@@ -376,6 +387,13 @@ std::unique_ptr<TuringMachine> TuringMachine::fromJson(const std::string& jsonSt
 
         auto machine = std::make_unique<TuringMachine>(j.value("name", "Untitled"),
                                                       static_cast<MachineType>(j.value("type", 0)));
+
+        // Load original code if present
+        if (j.contains("originalCode") && j["originalCode"].is_string()) {
+            std::string code = j["originalCode"].get<std::string>();
+            machine->setOriginalCode(code);
+            qDebug() << "Loaded original code, size:" << code.size() << "bytes";
+        }
 
         if (j.contains("states") && j["states"].is_array()) {
             qDebug() << "Found states array with" << j["states"].size() << "states";

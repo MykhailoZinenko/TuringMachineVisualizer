@@ -74,6 +74,9 @@ public:
     void setTapeContent(const std::string& content);
     std::string getTapeContent() const;
 
+    void setOriginalCode(const std::string& code);
+    std::string getOriginalCode() const;
+
     // Execution control
     void reset();
     bool step();
@@ -103,6 +106,8 @@ private:
     std::string currentState;
     ExecutionStatus status;
     int stepCount;
+
+    std::string m_originalCode;
 
     // Execution history
     std::vector<ExecutionSnapshot> history;

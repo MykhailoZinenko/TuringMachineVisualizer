@@ -34,6 +34,8 @@ public:
 
     void appendTransition(const Transition* transition);
 
+    bool applyCodeChanges();
+
     signals:
         // Signal emitted when the code has been changed and the model updated
         void codeChanged();

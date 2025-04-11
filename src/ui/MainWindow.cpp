@@ -103,7 +103,7 @@ void MainWindow::handleTabChanged(int index)
     if (index == 0) { // Visual tab
         // Apply code changes to the model before updating the visual representation
         if (codeEditorWidget) {
-            codeEditorWidget->updateMachineFromCode();
+            codeEditorWidget->applyCodeChanges();
         }
         // Update visual representation from model
         updateVisualFromModel();
@@ -177,6 +177,7 @@ void MainWindow::closeEvent(QCloseEvent *event)
 }
 
 // File menu actions
+// Fixed newMachine method for MainWindow.cpp
 void MainWindow::newMachine()
 {
     if (isDirty) {
@@ -195,34 +196,94 @@ void MainWindow::newMachine()
         }
     }
 
-    turingMachine = std::make_unique<TuringMachine>("Untitled");
+    // Create a new machine
+    auto newTuringMachine = std::make_unique<TuringMachine>("Untitled");
 
-    // Update all views
-    updateVisualFromModel();
+    // Check if creation was successful
+    if (!newTuringMachine) {
+        QMessageBox::critical(this, tr("Error"), tr("Failed to create a new machine"));
+        return;
+    }
 
-    if (codeEditorWidget) {
-        codeEditorWidget->updateFromModel();
+    // Add a default start state if needed
+    if (newTuringMachine->getAllStates().empty()) {
+        newTuringMachine->addState("q0", "Start State", StateType::START);
+    }
+
+    // Set default original code for a new machine
+    std::string defaultCode = "// Untitled Machine\n";
+    newTuringMachine->setOriginalCode(defaultCode);
+
+    // Set the machine in a safe way
+    turingMachine = std::move(newTuringMachine);
+    currentFileName.clear();
+
+    // Update tape
+    if (tapeWidget) {
+        tapeWidget->setTape(turingMachine->getTape());
+        tapeWidget->updateTapeDisplay();
+    }
+
+    if (tapeControlWidget) {
+        tapeControlWidget->setTape(turingMachine->getTape());
+    }
+
+    // Update UI components in a controlled sequence
+    if (statesDock) {
+        StatesListWidget* statesWidget = qobject_cast<StatesListWidget*>(statesDock->widget());
+        if (statesWidget) {
+            statesWidget->setMachine(turingMachine.get());
+            statesWidget->refreshStatesList();
+        }
+    }
+
+    if (transitionsDock) {
+        TransitionsListWidget* transitionsWidget = qobject_cast<TransitionsListWidget*>(transitionsDock->widget());
+        if (transitionsWidget) {
+            transitionsWidget->setMachine(turingMachine.get());
+            transitionsWidget->refreshTransitionsList();
+        }
     }
 
     if (propertiesEditor) {
         propertiesEditor->setMachine(turingMachine.get());
     }
 
+    // Switch to visual tab first
+    if (tabWidget) {
+        tabWidget->setCurrentIndex(0); // Visual tab
+    }
+
+    // Update code editor with a delay to ensure all other components are ready
+    if (codeEditorWidget) {
+        codeEditorWidget->setMachine(turingMachine.get());
+
+        // Use a timer to defer code editor update
+        QTimer::singleShot(100, this, [this]() {
+            try {
+                codeEditorWidget->updateFromModel();
+            } catch (const std::exception& e) {
+                qWarning() << "Error updating code editor:" << e.what();
+            }
+        });
+    }
+
+    // Update UI state
     runAction->setEnabled(true);
     pauseAction->setEnabled(false);
     stepForwardAction->setEnabled(true);
     stepBackwardAction->setEnabled(false);
+    resetAction->setEnabled(true);
 
-    currentFileName.clear();
     setDirty(false);
+
+    // Update window title
+    updateWindowTitle();
 
     statusBar()->showMessage(tr("Created new machine"), 2000);
 }
 
-// Updated openMachine method for MainWindow.cpp
-
-void MainWindow::openMachine()
-{
+void MainWindow::openMachine() {
     if (isDirty) {
         QMessageBox::StandardButton reply = QMessageBox::question(
             this, tr("Unsaved Changes"),
@@ -256,32 +317,57 @@ void MainWindow::openMachine()
     file.close();
 
     try {
+        qDebug() << "Loading machine from JSON file" << fileName;
+
+        // Create new machine from the JSON file
         auto loadedMachine = TuringMachine::fromJson(jsonStr);
         if (!loadedMachine) {
             throw std::runtime_error("Failed to create machine from file");
         }
 
+        // Log the number of transitions loaded
+        qDebug() << "Loaded machine with" << loadedMachine->getAllTransitions().size() << "transitions";
+        qDebug() << "Loaded original code size:" << loadedMachine->getOriginalCode().size() << "bytes";
+
+        // Store the new machine in the class member
         turingMachine = std::move(loadedMachine);
         currentFileName = fileName;
 
-        // Update all views
+        // First update the tape and core components
+        if (tapeWidget) {
+            tapeWidget->setTape(turingMachine->getTape());
+            tapeWidget->updateTapeDisplay();
+        }
+
+        if (tapeControlWidget) {
+            tapeControlWidget->setTape(turingMachine->getTape());
+        }
+
+        // Update all the UI components with the new machine reference
         updateVisualFromModel();
 
+        // Create a separate code editor update to avoid synchronization issues
         if (codeEditorWidget) {
-            codeEditorWidget->updateFromModel();
+            // Make sure the code editor has the right machine pointer
+            codeEditorWidget->setMachine(turingMachine.get());
+
+            // Use a timer to ensure UI is updated before we generate code
+            QTimer::singleShot(100, this, [this]() {
+                qDebug() << "Deferred code editor update - machine has"
+                         << turingMachine->getAllTransitions().size() << "transitions";
+
+                // Force a complete refresh of the code editor
+                codeEditorWidget->updateFromModel();
+            });
         }
 
-        if (propertiesEditor) {
-            propertiesEditor->setMachine(turingMachine.get());
-        }
-
+        // Update UI state
         runAction->setEnabled(true);
         pauseAction->setEnabled(false);
         stepForwardAction->setEnabled(true);
         stepBackwardAction->setEnabled(turingMachine->canStepBackward());
 
         setDirty(false);
-
         statusBar()->showMessage(tr("Opened %1").arg(fileName), 2000);
     } catch (const std::exception& e) {
         QMessageBox::warning(this, tr("Error"), tr("Invalid file format: %1").arg(e.what()));
@@ -292,6 +378,7 @@ void MainWindow::openMachine()
         updateVisualFromModel();
 
         if (codeEditorWidget) {
+            codeEditorWidget->setMachine(turingMachine.get());
             codeEditorWidget->updateFromModel();
         }
 
@@ -304,6 +391,12 @@ void MainWindow::saveMachine()
     if (currentFileName.isEmpty()) {
         saveAsOperation();
         return;
+    }
+
+    // Make sure we capture any code changes before saving
+    if (codeEditorWidget && tabWidget->currentIndex() == 1) {
+        // We're on the code tab, apply changes to ensure the latest code is saved
+        codeEditorWidget->applyCodeChanges();
     }
 
     QFile file(currentFileName);

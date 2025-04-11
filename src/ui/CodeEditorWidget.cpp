@@ -166,6 +166,7 @@ std::string CodeEditorWidget::getCurrentCode() const
     return m_codeEditor->toPlainText().toStdString();
 }
 
+// Improved updateFromModel method for CodeEditorWidget.cpp
 void CodeEditorWidget::updateFromModel()
 {
     qDebug() << "CodeEditorWidget::updateFromModel called";
@@ -178,21 +179,48 @@ void CodeEditorWidget::updateFromModel()
         return;
     }
 
-    qDebug() << "Before generating code, machine has" << m_machine->getAllTransitions().size() << "transitions";
+    // Check if the machine has transitions
+    auto transitions = m_machine->getAllTransitions();
+    qDebug() << "Machine has" << transitions.size() << "transitions in updateFromModel";
 
     m_ignoreTextChanges = true;
     try {
-        // Only regenerate if we don't have saved original code
-        if (m_originalCode.empty()) {
-            std::string code = generateCodeFromModel();
-            m_codeEditor->setPlainText(QString::fromStdString(code));
-            m_originalCode = code; // Save the original code
+        // First try to use original code from the machine if available
+        std::string originalCode = m_machine->getOriginalCode();
 
-            qDebug() << "Generated and set code from model";
+        if (!originalCode.empty()) {
+            // Use the original code if available
+            qDebug() << "Using original code from machine, size:" << originalCode.size();
+            m_codeEditor->setPlainText(QString::fromStdString(originalCode));
+            m_originalCode = originalCode;
         } else {
-            // Use the saved original code to preserve formatting
-            m_codeEditor->setPlainText(QString::fromStdString(m_originalCode));
-            qDebug() << "Using saved original code";
+            // Fall back to generating code from transitions
+            qDebug() << "No original code, generating from transitions";
+            std::string generatedCode = generateCodeFromModel();
+
+            if (generatedCode.empty() && !transitions.empty()) {
+                // If code generation fails but we have transitions, try a fallback approach
+                qDebug() << "Generated code is empty despite having transitions. Using fallback.";
+                generatedCode = "// " + m_machine->getName() + "\n\n";
+                for (const auto& transition : transitions) {
+                    if (transition) {
+                        try {
+                            generatedCode += transition->toFunctionNotation() + "\n";
+                        } catch (const std::exception& e) {
+                            qWarning() << "Error generating function notation for transition:" << e.what();
+                            // Add a simple representation as fallback
+                            generatedCode += "// Failed to format: " + transition->getFromState() + " -> " +
+                                    transition->getToState() + " on " + transition->getReadSymbol() + "\n";
+                        }
+                    }
+                }
+            }
+
+            m_codeEditor->setPlainText(QString::fromStdString(generatedCode));
+            m_originalCode = generatedCode;
+
+            // Also update the machine's original code with our generated version
+            m_machine->setOriginalCode(generatedCode);
         }
     } catch (const std::exception& e) {
         qCritical() << "Exception in updateFromModel:" << e.what();
@@ -243,10 +271,19 @@ void CodeEditorWidget::appendTransition(const Transition* transition)
     setStatus(tr("Added new transition"));
 }
 
+bool CodeEditorWidget::applyCodeChanges() {
+    if (m_applyButton) {
+        m_applyButton->click();
+        return true;
+    }
+    return false;
+}
+
 std::string CodeEditorWidget::generateCodeFromModel()
 {
     if (!m_machine) return "";
 
+    qDebug() << "Generating code from model with" << m_machine->getAllTransitions().size() << "transitions";
     std::string code;
 
     // Machine name as comment header
@@ -255,9 +292,26 @@ std::string CodeEditorWidget::generateCodeFromModel()
     try {
         // Generate transitions using function notation
         auto transitions = m_machine->getAllTransitions();
+        if (transitions.empty()) {
+            qDebug() << "No transitions found in the machine";
+            return code;
+        }
+
         for (const auto& transition : transitions) {
-            if (transition) { // Check for null pointer
-                code += transition->toFunctionNotation() + "\n";
+            if (!transition) {
+                qWarning() << "Null transition pointer encountered";
+                continue;
+            }
+
+            try {
+                std::string transitionCode = transition->toFunctionNotation();
+                code += transitionCode + "\n";
+                qDebug() << "Added transition:" << QString::fromStdString(transitionCode);
+            } catch (const std::exception& e) {
+                qWarning() << "Exception while formatting transition:" << e.what();
+                // Add a fallback representation
+                code += "// Error formatting: " + transition->getFromState() + " on " +
+                        transition->getReadSymbol() + "\n";
             }
         }
     } catch (const std::exception& e) {
@@ -270,6 +324,7 @@ std::string CodeEditorWidget::generateCodeFromModel()
         code += "// Unknown error generating code\n";
     }
 
+    qDebug() << "Generated code size:" << code.size() << "bytes";
     return code;
 }
 
@@ -401,6 +456,12 @@ void CodeEditorWidget::applyCode()
     m_originalCode = code; // Save the code to preserve formatting
 
     if (parseCodeAndUpdateModel(code)) {
+        // Also save the code to the machine for persistence
+        if (m_machine) {
+            m_machine->setOriginalCode(code);
+            qDebug() << "Saved code to machine, size:" << code.size();
+        }
+
         setStatus(tr("Code applied successfully!"));
         m_applyButton->setEnabled(false);
         m_resetButton->setEnabled(false);
