@@ -42,7 +42,7 @@ void TapeDocument::setInitialHeadPosition(int position)
     emit tapeContentChanged();
 }
 
-bool TapeDocument::step()
+bool TapeDocument::step(bool isManualStep)
 {
     if (!getProject() || !getProject()->getMachine()) {
         qWarning() << "No machine available for step";
@@ -60,7 +60,7 @@ bool TapeDocument::step()
     bool success = machine->step();
 
     // Make sure the machine is in PAUSED state after a manual step
-    if (success && machine->getStatus() == ExecutionStatus::RUNNING) {
+    if (success && machine->getStatus() == ExecutionStatus::RUNNING && isManualStep) {
         machine->pause();
     }
 
@@ -80,7 +80,7 @@ void TapeDocument::reset()
     machine->setTape(m_tape.get());
 
     // Reset the machine
-    machine->reset();
+    machine->reset(true);
 
     emit executionStateChanged();
 }
@@ -115,6 +115,26 @@ void TapeDocument::pause()
 
     // Pause the machine
     machine->pause();
+
+    emit executionStateChanged();
+}
+
+void TapeDocument::stop()
+{
+    if (!getProject() || !getProject()->getMachine()) {
+        return;
+    }
+
+    TuringMachine* machine = getProject()->getMachine();
+
+    // Set the active tape in the machine
+    machine->setTape(m_tape.get());
+
+    // Stop the simulation (set status to READY)
+    machine->reset();
+
+    // Restore the initial head position but don't modify tape content
+    m_tape->setHeadPosition(m_initialHeadPosition);
 
     emit executionStateChanged();
 }

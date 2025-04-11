@@ -25,10 +25,11 @@ public:
     void setInitialHeadPosition(int position);
 
     // Execution methods
-    bool step();
+    bool step(bool isManualStep = false);
     void reset();
     void run();
     void pause();
+    void stop(); // New method to stop simulation without resetting tape content
     bool canStepBackward() const;
     bool stepBackward();
 

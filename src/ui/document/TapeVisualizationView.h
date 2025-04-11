@@ -30,6 +30,7 @@ public:
     void resetTape();
     void runSimulation();
     void pauseSimulation();
+    void stopSimulation(); // New slot for stop button
     void stepForward();
     void stepBackward();
     void onTapeContentChanged();
@@ -48,6 +49,7 @@ private:
     QPushButton* m_resetButton;
     QPushButton* m_runButton;
     QPushButton* m_pauseButton;
+    QPushButton* m_stopButton; // New stop button
     QPushButton* m_stepForwardButton;
     QPushButton* m_stepBackwardButton;
     QLabel* m_statusLabel;

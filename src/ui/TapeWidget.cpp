@@ -50,7 +50,6 @@ void TapeWidget::setTape(Tape* tape)
 void TapeWidget::updateTapeDisplay()
 {
     if (m_tape) {
-        ensureHeadVisible();
         update();
     }
 }

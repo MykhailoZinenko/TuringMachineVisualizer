@@ -119,6 +119,12 @@ void TapeVisualizationView::setupUI()
     m_pauseButton->setEnabled(false);
     controlsLayout->addWidget(m_pauseButton);
 
+    // Add the new stop button
+    m_stopButton = new QPushButton(tr("Stop"), this);
+    connect(m_stopButton, &QPushButton::clicked, this, &TapeVisualizationView::stopSimulation);
+    m_stopButton->setEnabled(false);
+    controlsLayout->addWidget(m_stopButton);
+
     m_stepForwardButton = new QPushButton(tr("Step >"), this);
     connect(m_stepForwardButton, &QPushButton::clicked, this, &TapeVisualizationView::stepForward);
     controlsLayout->addWidget(m_stepForwardButton);
@@ -242,9 +248,10 @@ void TapeVisualizationView::runSimulation()
     // Start the timer to execute steps
     m_simulationTimer->start(m_simulationSpeed);
 
-    // Update UI
+    // Update UI - ensure pause button is enabled
     m_runButton->setEnabled(false);
-    m_pauseButton->setEnabled(true);
+    m_pauseButton->setEnabled(true); // Make sure pause is enabled when running
+    m_stopButton->setEnabled(true);  // Make sure stop is enabled when running
     m_stepForwardButton->setEnabled(false);
     m_stepBackwardButton->setEnabled(false);
 
@@ -267,14 +274,31 @@ void TapeVisualizationView::pauseSimulation()
     setStatusMessage(tr("Simulation paused"));
 }
 
+void TapeVisualizationView::stopSimulation()
+{
+    if (!m_tapeDocument) return;
+
+    // Stop the timer if it's running
+    m_simulationTimer->stop();
+
+    // Call the new stop method on the document
+    m_tapeDocument->stop();
+
+    // Update UI
+    updateSimulationControls();
+
+    setStatusMessage(tr("Simulation stopped"));
+}
+
 void TapeVisualizationView::stepForward()
 {
     if (!m_tapeDocument) return;
 
-    // Execute a step
-    bool success = m_tapeDocument->step();
+    // Execute a step - indicate this is a manual step
+    bool success = m_tapeDocument->step(true);
 
     if (success) {
+        // This will call ensureHeadVisible() only when needed
         m_tapeWidget->onStepExecuted();
 
         // Ensure controls are updated AFTER step execution
@@ -282,7 +306,7 @@ void TapeVisualizationView::stepForward()
 
         setStatusMessage(tr("Step executed"));
 
-        // Make sure run button is enabled after a successful step
+        // Run button should be enabled after a successful manual step
         m_runButton->setEnabled(true);
         m_stepForwardButton->setEnabled(true);
     } else {
@@ -318,6 +342,7 @@ void TapeVisualizationView::stepBackward()
 
     // Execute a backward step
     if (m_tapeDocument->stepBackward()) {
+        // This will now call ensureHeadVisible() only when needed
         m_tapeWidget->onStepExecuted();
 
         // Update UI based on execution state
@@ -353,16 +378,40 @@ void TapeVisualizationView::onSimulationSpeed(int value)
 
 void TapeVisualizationView::onSimulationTimerTick()
 {
-    // Execute a step during automatic simulation
-    stepForward();
+    if (!m_tapeDocument) return;
 
-    // If the machine has halted or errored, stop the timer
-    if (m_tapeDocument && m_tapeDocument->getProject() && m_tapeDocument->getProject()->getMachine()) {
-        auto status = m_tapeDocument->getProject()->getMachine()->getStatus();
+    // Execute a step - indicate this is NOT a manual step
+    bool success = m_tapeDocument->step(false);
 
-        if (status != ExecutionStatus::RUNNING && status != ExecutionStatus::PAUSED) {
-            m_simulationTimer->stop();
-            updateSimulationControls();
+    if (success) {
+        // This will call ensureHeadVisible() only when needed
+        m_tapeWidget->onStepExecuted();
+
+        // The machine status should stay RUNNING
+        m_runButton->setEnabled(false);
+        m_pauseButton->setEnabled(true); // Explicitly ensure pause is enabled
+    } else {
+        // Step failed, machine might have halted
+        m_simulationTimer->stop();
+        updateSimulationControls();
+
+        if (m_tapeDocument->getProject() && m_tapeDocument->getProject()->getMachine()) {
+            auto status = m_tapeDocument->getProject()->getMachine()->getStatus();
+
+            switch (status) {
+                case ExecutionStatus::HALTED_ACCEPT:
+                    setStatusMessage(tr("Machine halted: Accept state reached"));
+                break;
+                case ExecutionStatus::HALTED_REJECT:
+                    setStatusMessage(tr("Machine halted: Reject state reached"));
+                break;
+                case ExecutionStatus::ERROR:
+                    setStatusMessage(tr("Machine halted: No valid transition"), true);
+                break;
+                default:
+                    setStatusMessage(tr("Machine halted"), true);
+                break;
+            }
         }
     }
 }
@@ -378,6 +427,7 @@ void TapeVisualizationView::updateSimulationControls()
     if (!m_tapeDocument || !m_tapeDocument->getProject() || !m_tapeDocument->getProject()->getMachine()) {
         m_runButton->setEnabled(false);
         m_pauseButton->setEnabled(false);
+        m_stopButton->setEnabled(false);
         m_stepForwardButton->setEnabled(false);
         m_stepBackwardButton->setEnabled(false);
         return;
@@ -391,11 +441,14 @@ void TapeVisualizationView::updateSimulationControls()
     // Always enable step forward for READY and PAUSED states
     m_stepForwardButton->setEnabled(status == ExecutionStatus::READY || status == ExecutionStatus::PAUSED);
 
-    // Enable/disable Run button
+    // Enable/disable Run button (only in READY or PAUSED states)
     m_runButton->setEnabled(status == ExecutionStatus::READY || status == ExecutionStatus::PAUSED);
 
-    // Enable/disable Pause button
+    // Enable/disable Pause button (only when RUNNING)
     m_pauseButton->setEnabled(status == ExecutionStatus::RUNNING);
+
+    // Enable/disable Stop button (in any state except READY)
+    m_stopButton->setEnabled(status != ExecutionStatus::READY);
 
     // Enable/disable Step Backward button
     m_stepBackwardButton->setEnabled(m_tapeDocument->canStepBackward());

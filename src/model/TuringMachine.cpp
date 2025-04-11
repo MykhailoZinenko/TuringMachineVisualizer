@@ -182,7 +182,7 @@ std::string TuringMachine::getOriginalCode() const
 }
 
 // Execution control
-void TuringMachine::reset()
+void TuringMachine::reset(const bool resetTape)
 {
     if (!getStartState().empty()) {
         currentState = getStartState();
@@ -192,7 +192,7 @@ void TuringMachine::reset()
         currentState = "";
     }
 
-    if (activeTape) {
+    if (activeTape && resetTape) {
         activeTape->reset();
     }
 
@@ -271,12 +271,17 @@ bool TuringMachine::step()
     stepCount++;
     addToHistory(createSnapshot());
 
+    qDebug() << "Step count: " << stepCount << " " << (int)oldStatus;
+
     // Set back to PAUSED or original state after a single step
-    if (oldStatus == ExecutionStatus::PAUSED || oldStatus == ExecutionStatus::READY) {
+    if (oldStatus == ExecutionStatus::PAUSED || oldStatus == ExecutionStatus::READY || oldStatus == ExecutionStatus::RUNNING) {
         status = oldStatus;
     } else {
+        qDebug() << "here";
         status = ExecutionStatus::PAUSED;
     }
+
+    qDebug() << "Step count after: " << stepCount << " " << (int)oldStatus;
 
     return true;
 }

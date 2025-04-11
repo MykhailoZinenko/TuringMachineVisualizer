@@ -77,7 +77,7 @@ public:
     std::string getOriginalCode() const;
 
     // Execution control
-    void reset();
+    void reset(bool resetTape = false);
     bool step();
     void run();
     void pause();
