@@ -1,6 +1,6 @@
 #include "TapeVisualizationView.h"
 #include "../../document/TapeDocument.h"
-#include "../../document/CodeDocument.h"
+#include "../../project/Project.h"
 #include "../TapeWidget.h"
 #include "../../model/TuringMachine.h"
 #include <QLineEdit>
@@ -20,10 +20,18 @@ TapeVisualizationView::TapeVisualizationView(TapeDocument* document, QWidget* pa
 {
     setupUI();
     updateFromDocument();
-    
+
     // Create simulation timer
     m_simulationTimer = new QTimer(this);
-    connect(m_simulationTimer, &QTimer::timeout, this, &TapeVisualizationView::stepForward);
+    connect(m_simulationTimer, &QTimer::timeout, this, &TapeVisualizationView::onSimulationTimerTick);
+
+    // Connect to document signals
+    if (m_tapeDocument) {
+        connect(m_tapeDocument, &TapeDocument::executionStateChanged,
+                this, &TapeVisualizationView::onExecutionStateChanged);
+        connect(m_tapeDocument, &TapeDocument::tapeContentChanged,
+                this, &TapeVisualizationView::onTapeContentChanged);
+    }
 }
 
 TapeVisualizationView::~TapeVisualizationView()
@@ -31,15 +39,16 @@ TapeVisualizationView::~TapeVisualizationView()
     delete m_simulationTimer;
 }
 
-// Update setupUI method to better integrate TapeWidget
 void TapeVisualizationView::setupUI()
 {
     QVBoxLayout* mainLayout = new QVBoxLayout(this);
 
-    // Header with code reference
-    QLabel* headerLabel = new QLabel(tr("Tape: %1 (Machine: %2)")
-        .arg(QString::fromStdString(m_tapeDocument->getName()))
-        .arg(QString::fromStdString(m_tapeDocument->getCodeDocument()->getName())), this);
+    // Header label
+    QString headerText = m_tapeDocument ?
+                         tr("Tape: %1").arg(QString::fromStdString(m_tapeDocument->getName())) :
+                         tr("Tape Visualization");
+
+    QLabel* headerLabel = new QLabel(headerText, this);
     QFont headerFont = headerLabel->font();
     headerFont.setBold(true);
     headerFont.setPointSize(headerFont.pointSize() + 1);
@@ -48,8 +57,10 @@ void TapeVisualizationView::setupUI()
 
     // Tape widget
     m_tapeWidget = new TapeWidget(this);
+    if (m_tapeDocument) {
+        m_tapeWidget->setTape(m_tapeDocument->getTape());
+    }
     m_tapeWidget->setMinimumHeight(150);
-    m_tapeWidget->setTape(m_tapeDocument->getTape());
     mainLayout->addWidget(m_tapeWidget, 1);
 
     // Tape content setup group
@@ -149,212 +160,245 @@ void TapeVisualizationView::setupUI()
 
 void TapeVisualizationView::updateFromDocument()
 {
+    if (!m_tapeDocument) return;
+
+    // Update header label
+    QString headerText = tr("Tape: %1").arg(QString::fromStdString(m_tapeDocument->getName()));
+    if (m_tapeDocument->getProject()) {
+        headerText += tr(" (Project: %1)").arg(QString::fromStdString(m_tapeDocument->getProject()->getName()));
+    }
+    QLabel* headerLabel = qobject_cast<QLabel*>(layout()->itemAt(0)->widget());
+    if (headerLabel) {
+        headerLabel->setText(headerText);
+    }
+
     // Update the tape widget with the document's tape
     m_tapeWidget->setTape(m_tapeDocument->getTape());
     m_tapeWidget->updateTapeDisplay();
-    
-    // Update the content edit with the tape's initial content
+
+    // Update the content edit with the tape's content
     m_contentEdit->setText(QString::fromStdString(m_tapeDocument->getTape()->getCurrentContent()));
-    
+
     // Update head position spin
     m_headPositionSpin->setValue(m_tapeDocument->getTape()->getHeadPosition());
-    
+
+    // Update simulation controls
+    updateSimulationControls();
+
     setStatusMessage(tr("Tape loaded from document"));
 }
 
 void TapeVisualizationView::setTapeContent()
 {
+    if (!m_tapeDocument) {
+        qDebug() << "No tape document available";
+        return;
+    }
+
     QString content = m_contentEdit->text();
     int headPos = m_headPositionSpin->value();
-    
-    Tape* tape = m_tapeDocument->getTape();
-    tape->reset();
-    tape->setInitialContent(content.toStdString());
-    tape->setHeadPosition(headPos);
-    
-    m_tapeWidget->updateTapeDisplay();
-    
+
+    qDebug() << "Setting tape content to:" << content << "with head at position:" << headPos;
+
     m_tapeDocument->setInitialContent(content.toStdString());
     m_tapeDocument->setInitialHeadPosition(headPos);
-    
-    setStatusMessage(tr("Tape content set"));
-    
+
+    // Force tape widget update
+    if (m_tapeWidget) {
+        m_tapeWidget->updateTapeDisplay();
+        qDebug() << "TapeWidget display updated";
+    } else {
+        qDebug() << "No tape widget available";
+    }
+
+    setStatusMessage(tr("Tape content set to: ") + content);
+
     // Update simulation controls
     updateSimulationControls();
-    
+
     emit viewModified();
 }
 
 void TapeVisualizationView::resetTape()
 {
-    Tape* tape = m_tapeDocument->getTape();
-    tape->reset();
-    
-    // If we have initial content, apply it
-    tape->setInitialContent(m_tapeDocument->getTape()->getCurrentContent());
-    tape->setHeadPosition(m_tapeDocument->getTape()->getHeadPosition());
-    
+    if (!m_tapeDocument) return;
+
+    m_tapeDocument->reset();
     m_tapeWidget->updateTapeDisplay();
-    
+
     setStatusMessage(tr("Tape reset to initial state"));
-    
+
     // Update simulation controls
     updateSimulationControls();
 }
 
 void TapeVisualizationView::runSimulation()
 {
-    // Access the Turing machine from the code document
-    TuringMachine* machine = m_tapeDocument->getCodeDocument()->getMachine();
-    
-    if (!machine) {
-        setStatusMessage(tr("No machine available"), true);
-        return;
-    }
-    
-    if (machine->getStatus() == ExecutionStatus::HALTED_ACCEPT ||
-        machine->getStatus() == ExecutionStatus::HALTED_REJECT ||
-        machine->getStatus() == ExecutionStatus::ERROR) {
-        setStatusMessage(tr("Machine halted, reset to run again"), true);
-        return;
-    }
-    
+    if (!m_tapeDocument) return;
+
+    // Start the simulation
+    m_tapeDocument->run();
+
+    // Start the timer to execute steps
     m_simulationTimer->start(m_simulationSpeed);
-    
+
+    // Update UI
     m_runButton->setEnabled(false);
     m_pauseButton->setEnabled(true);
     m_stepForwardButton->setEnabled(false);
     m_stepBackwardButton->setEnabled(false);
-    
+
     setStatusMessage(tr("Simulation running..."));
 }
 
 void TapeVisualizationView::pauseSimulation()
 {
+    if (!m_tapeDocument) return;
+
+    // Stop the timer
     m_simulationTimer->stop();
-    
-    m_runButton->setEnabled(true);
-    m_pauseButton->setEnabled(false);
-    m_stepForwardButton->setEnabled(true);
-    
-    // Check if we can step backward
-    TuringMachine* machine = m_tapeDocument->getCodeDocument()->getMachine();
-    if (machine && machine->canStepBackward()) {
-        m_stepBackwardButton->setEnabled(true);
-    }
-    
+
+    // Pause the simulation
+    m_tapeDocument->pause();
+
+    // Update UI
+    updateSimulationControls();
+
     setStatusMessage(tr("Simulation paused"));
 }
 
 void TapeVisualizationView::stepForward()
 {
-    TuringMachine* machine = m_tapeDocument->getCodeDocument()->getMachine();
-    
-    if (!machine) {
-        setStatusMessage(tr("No machine available"), true);
-        return;
-    }
+    if (!m_tapeDocument) return;
 
-    machine->setActiveTape(m_tapeDocument->getTape());
-    
-    if (machine->step()) {
+    // Execute a step
+    bool success = m_tapeDocument->step();
+
+    if (success) {
         m_tapeWidget->onStepExecuted();
-        
-        // Update backward button based on history
-        m_stepBackwardButton->setEnabled(machine->canStepBackward());
-        
-        setStatusMessage(tr("Step executed - State: %1")
-            .arg(QString::fromStdString(machine->getCurrentState())));
+
+        // Ensure controls are updated AFTER step execution
+        QTimer::singleShot(0, this, &TapeVisualizationView::updateSimulationControls);
+
+        setStatusMessage(tr("Step executed"));
+
+        // Make sure run button is enabled after a successful step
+        m_runButton->setEnabled(true);
+        m_stepForwardButton->setEnabled(true);
     } else {
-        // Machine halted
-        m_simulationTimer->stop();
-        
-        ExecutionStatus status = machine->getStatus();
-        switch (status) {
-            case ExecutionStatus::HALTED_ACCEPT:
-                setStatusMessage(tr("Machine halted: Accept state reached"));
+        // Step failed, machine might have halted
+        updateSimulationControls();
+
+        if (m_tapeDocument->getProject() && m_tapeDocument->getProject()->getMachine()) {
+            auto status = m_tapeDocument->getProject()->getMachine()->getStatus();
+
+            switch (status) {
+                case ExecutionStatus::HALTED_ACCEPT:
+                    setStatusMessage(tr("Machine halted: Accept state reached"));
                 break;
-            case ExecutionStatus::HALTED_REJECT:
-                setStatusMessage(tr("Machine halted: Reject state reached"));
+                case ExecutionStatus::HALTED_REJECT:
+                    setStatusMessage(tr("Machine halted: Reject state reached"));
                 break;
-            case ExecutionStatus::ERROR:
-                setStatusMessage(tr("Machine halted: No valid transition"), true);
+                case ExecutionStatus::ERROR:
+                    setStatusMessage(tr("Machine halted: No valid transition"), true);
                 break;
-            default:
-                setStatusMessage(tr("Machine halted"), true);
+                default:
+                    setStatusMessage(tr("Machine halted"), true);
                 break;
+            }
+        } else {
+            setStatusMessage(tr("Step execution failed"), true);
         }
-        
-        m_runButton->setEnabled(false);
-        m_pauseButton->setEnabled(false);
-        m_stepForwardButton->setEnabled(false);
-        m_stepBackwardButton->setEnabled(machine->canStepBackward());
     }
 }
 
 void TapeVisualizationView::stepBackward()
 {
-    TuringMachine* machine = m_tapeDocument->getCodeDocument()->getMachine();
-    
-    if (!machine) {
-        setStatusMessage(tr("No machine available"), true);
-        return;
-    }
-    
-    if (machine->stepBackward()) {
+    if (!m_tapeDocument) return;
+
+    // Execute a backward step
+    if (m_tapeDocument->stepBackward()) {
         m_tapeWidget->onStepExecuted();
-        
-        // Update backward button
-        m_stepBackwardButton->setEnabled(machine->canStepBackward());
-        
-        setStatusMessage(tr("Step undone - State: %1")
-            .arg(QString::fromStdString(machine->getCurrentState())));
+
+        // Update UI based on execution state
+        updateSimulationControls();
+
+        setStatusMessage(tr("Step undone"));
     } else {
+        // Step back failed
+        updateSimulationControls();
         setStatusMessage(tr("Cannot step backward further"), true);
-        m_stepBackwardButton->setEnabled(false);
     }
 }
 
 void TapeVisualizationView::onTapeContentChanged()
 {
+    // Update tape display
+    m_tapeWidget->updateTapeDisplay();
+
+    // Mark as modified
     emit viewModified();
 }
 
 void TapeVisualizationView::onSimulationSpeed(int value)
 {
     m_simulationSpeed = value;
-    
+
     if (m_simulationTimer->isActive()) {
         m_simulationTimer->setInterval(m_simulationSpeed);
     }
-    
+
     setStatusMessage(tr("Simulation speed set to %1 ms").arg(m_simulationSpeed));
+}
+
+void TapeVisualizationView::onSimulationTimerTick()
+{
+    // Execute a step during automatic simulation
+    stepForward();
+
+    // If the machine has halted or errored, stop the timer
+    if (m_tapeDocument && m_tapeDocument->getProject() && m_tapeDocument->getProject()->getMachine()) {
+        auto status = m_tapeDocument->getProject()->getMachine()->getStatus();
+
+        if (status != ExecutionStatus::RUNNING && status != ExecutionStatus::PAUSED) {
+            m_simulationTimer->stop();
+            updateSimulationControls();
+        }
+    }
+}
+
+void TapeVisualizationView::onExecutionStateChanged()
+{
+    // Update the UI based on the current execution state
+    updateSimulationControls();
 }
 
 void TapeVisualizationView::updateSimulationControls()
 {
-    // Reset simulation controls to default state
-    m_runButton->setEnabled(true);
-    m_pauseButton->setEnabled(false);
-    m_stepForwardButton->setEnabled(true);
-    m_stepBackwardButton->setEnabled(false);
-    
-    // Check machine state
-    TuringMachine* machine = m_tapeDocument->getCodeDocument()->getMachine();
-    if (machine) {
-        ExecutionStatus status = machine->getStatus();
-        
-        if (status == ExecutionStatus::HALTED_ACCEPT ||
-            status == ExecutionStatus::HALTED_REJECT ||
-            status == ExecutionStatus::ERROR) {
-            m_runButton->setEnabled(false);
-            m_stepForwardButton->setEnabled(false);
-        }
-        
-        if (machine->canStepBackward()) {
-            m_stepBackwardButton->setEnabled(true);
-        }
+    if (!m_tapeDocument || !m_tapeDocument->getProject() || !m_tapeDocument->getProject()->getMachine()) {
+        m_runButton->setEnabled(false);
+        m_pauseButton->setEnabled(false);
+        m_stepForwardButton->setEnabled(false);
+        m_stepBackwardButton->setEnabled(false);
+        return;
     }
+
+    auto machine = m_tapeDocument->getProject()->getMachine();
+    auto status = machine->getStatus();
+
+    qDebug() << "Machine status:" << static_cast<int>(status);
+
+    // Always enable step forward for READY and PAUSED states
+    m_stepForwardButton->setEnabled(status == ExecutionStatus::READY || status == ExecutionStatus::PAUSED);
+
+    // Enable/disable Run button
+    m_runButton->setEnabled(status == ExecutionStatus::READY || status == ExecutionStatus::PAUSED);
+
+    // Enable/disable Pause button
+    m_pauseButton->setEnabled(status == ExecutionStatus::RUNNING);
+
+    // Enable/disable Step Backward button
+    m_stepBackwardButton->setEnabled(m_tapeDocument->canStepBackward());
 }
 
 void TapeVisualizationView::setStatusMessage(const QString& message, bool isError)

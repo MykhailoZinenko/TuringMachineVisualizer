@@ -18,11 +18,17 @@ set(SOURCES
         # Main
         src/main.cpp
 
-        # Document Management
+        # Project
+        src/project/Project.cpp
+        src/project/ProjectManager.cpp
+
+        # Document
         src/document/Document.cpp
         src/document/CodeDocument.cpp
         src/document/TapeDocument.cpp
-        src/document/DocumentManager.cpp
+
+        # Parser
+        src/parser/CodeParser.cpp
 
         # UI - Main components
         src/ui/MainWindow.cpp
@@ -34,33 +40,28 @@ set(SOURCES
         src/ui/document/TapeVisualizationView.cpp
 
         # Existing UI components
-        src/ui/StateDialog.cpp
-        src/ui/TransitionDialog.cpp
-        src/ui/StatesListWidget.cpp
-        src/ui/TransitionsListWidget.cpp
         src/ui/TapeWidget.cpp
-        src/ui/TapeControlWidget.cpp
-        src/ui/PreferencesDialog.cpp
-        src/ui/PropertiesEditorWidget.cpp
-        src/ui/CodeEditorWidget.cpp
 
         # Model
         src/model/Tape.cpp
         src/model/State.cpp
         src/model/Transition.cpp
         src/model/TuringMachine.cpp
-
-        # Parser
-        src/parser/CodeParser.cpp
 )
 
 # Set header files
 set(HEADERS
-        # Document Management
+        # Project
+        src/project/Project.h
+        src/project/ProjectManager.h
+
+        # Document
         src/document/Document.h
         src/document/CodeDocument.h
         src/document/TapeDocument.h
-        src/document/DocumentManager.h
+
+        # Parser
+        src/parser/CodeParser.h
 
         # UI - Main components
         src/ui/MainWindow.h
@@ -72,24 +73,13 @@ set(HEADERS
         src/ui/document/TapeVisualizationView.h
 
         # Existing UI components
-        src/ui/StateDialog.h
-        src/ui/TransitionDialog.h
-        src/ui/StatesListWidget.h
-        src/ui/TransitionsListWidget.h
         src/ui/TapeWidget.h
-        src/ui/TapeControlWidget.h
-        src/ui/PreferencesDialog.h
-        src/ui/PropertiesEditorWidget.h
-        src/ui/CodeEditorWidget.h
 
         # Model
         src/model/Tape.h
         src/model/State.h
         src/model/Transition.h
         src/model/TuringMachine.h
-
-        # Parser
-        src/parser/CodeParser.h
 )
 
 # Include directories

@@ -1,9 +1,8 @@
 #include "MainWindow.h"
 #include "DocumentTabManager.h"
 #include "../document/Document.h"
-#include "../document/CodeDocument.h"
-#include "../document/TapeDocument.h"
-#include "../document/DocumentManager.h"
+#include "../project/Project.h"
+#include "../project/ProjectManager.h"
 #include <QApplication>
 #include <QMenuBar>
 #include <QToolBar>
@@ -17,7 +16,7 @@
 #include <QScreen>
 
 MainWindow::MainWindow(QWidget *parent)
-    : QMainWindow(parent), m_currentDocument(nullptr)
+    : QMainWindow(parent), m_currentDocument(nullptr), m_currentProject(nullptr)
 {
     // Create and set the central widget
     m_tabManager = new DocumentTabManager(this);
@@ -29,21 +28,17 @@ MainWindow::MainWindow(QWidget *parent)
     createToolbars();
     createStatusBar();
 
-    // Read settings
-    readSettings();
-
-    // Connect document manager signals
-    connect(&DocumentManager::getInstance(), &DocumentManager::documentAdded,
-            this, &MainWindow::onDocumentAdded);
-
     // Connect tab manager signals
     connect(m_tabManager, &DocumentTabManager::documentTabChanged,
             this, &MainWindow::onDocumentTabChanged);
     connect(m_tabManager, &DocumentTabManager::documentTabClosed,
             this, &MainWindow::onDocumentTabClosed);
 
+    // Read settings
+    readSettings();
+
     // Set window title
-    setWindowTitle("Turing Machine Visualizer");
+    updateWindowTitle();
 
     // Show ready status
     statusBar()->showMessage(tr("Ready"));
@@ -55,20 +50,21 @@ MainWindow::~MainWindow()
 
 void MainWindow::closeEvent(QCloseEvent *event)
 {
-    // Check for any modified documents
-    bool hasModifiedDocuments = false;
-    for (Document* doc : DocumentManager::getInstance().getAllDocuments()) {
-        if (doc->isModified()) {
-            hasModifiedDocuments = true;
+    // Check if there are any unsaved projects
+    bool hasUnsavedProjects = false;
+
+    for (Project* project : ProjectManager::getInstance().getAllProjects()) {
+        if (project->isModified()) {
+            hasUnsavedProjects = true;
             break;
         }
     }
 
-    if (hasModifiedDocuments) {
+    if (hasUnsavedProjects) {
         QMessageBox::StandardButton result = QMessageBox::question(
             this,
             tr("Unsaved Changes"),
-            tr("There are unsaved changes. Do you want to save before closing?"),
+            tr("There are unsaved changes in one or more projects. Save before closing?"),
             QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel
         );
 
@@ -78,10 +74,10 @@ void MainWindow::closeEvent(QCloseEvent *event)
         }
 
         if (result == QMessageBox::Save) {
-            // Save all modified documents
-            for (Document* doc : DocumentManager::getInstance().getAllDocuments()) {
-                if (doc->isModified()) {
-                    DocumentManager::getInstance().saveDocument(doc);
+            // Save all modified projects
+            for (Project* project : ProjectManager::getInstance().getAllProjects()) {
+                if (project->isModified()) {
+                    ProjectManager::getInstance().saveProject(project);
                 }
             }
         }
@@ -93,31 +89,31 @@ void MainWindow::closeEvent(QCloseEvent *event)
 
 void MainWindow::createActions()
 {
-    // New Code Document action
-    m_newCodeAction = new QAction(tr("&New Code"), this);
-    m_newCodeAction->setShortcuts(QKeySequence::New);
-    m_newCodeAction->setStatusTip(tr("Create a new Turing machine"));
-    connect(m_newCodeAction, &QAction::triggered, this, &MainWindow::newCodeDocument);
+    // New Project action
+    m_newProjectAction = new QAction(tr("&New Project"), this);
+    m_newProjectAction->setShortcuts(QKeySequence::New);
+    m_newProjectAction->setStatusTip(tr("Create a new Turing machine project"));
+    connect(m_newProjectAction, &QAction::triggered, this, &MainWindow::newProject);
 
-    // Open Document action
-    m_openAction = new QAction(tr("&Open..."), this);
-    m_openAction->setShortcuts(QKeySequence::Open);
-    m_openAction->setStatusTip(tr("Open an existing document"));
-    connect(m_openAction, &QAction::triggered, this, &MainWindow::openDocument);
+    // Open Project action
+    m_openProjectAction = new QAction(tr("&Open Project..."), this);
+    m_openProjectAction->setShortcuts(QKeySequence::Open);
+    m_openProjectAction->setStatusTip(tr("Open an existing project"));
+    connect(m_openProjectAction, &QAction::triggered, this, &MainWindow::openProject);
 
-    // Save Document action
-    m_saveAction = new QAction(tr("&Save"), this);
-    m_saveAction->setShortcuts(QKeySequence::Save);
-    m_saveAction->setStatusTip(tr("Save the current document"));
-    m_saveAction->setEnabled(false); // Disabled until a document is active
-    connect(m_saveAction, &QAction::triggered, this, &MainWindow::saveDocument);
+    // Save Project action
+    m_saveProjectAction = new QAction(tr("&Save Project"), this);
+    m_saveProjectAction->setShortcuts(QKeySequence::Save);
+    m_saveProjectAction->setStatusTip(tr("Save the current project"));
+    m_saveProjectAction->setEnabled(false); // Disabled until a project is active
+    connect(m_saveProjectAction, &QAction::triggered, this, &MainWindow::saveProject);
 
     // Save As action
-    m_saveAsAction = new QAction(tr("Save &As..."), this);
-    m_saveAsAction->setShortcuts(QKeySequence::SaveAs);
-    m_saveAsAction->setStatusTip(tr("Save the current document with a new name"));
-    m_saveAsAction->setEnabled(false); // Disabled until a document is active
-    connect(m_saveAsAction, &QAction::triggered, this, &MainWindow::saveDocumentAs);
+    m_saveAsProjectAction = new QAction(tr("Save Project &As..."), this);
+    m_saveAsProjectAction->setShortcuts(QKeySequence::SaveAs);
+    m_saveAsProjectAction->setStatusTip(tr("Save the current project with a new name"));
+    m_saveAsProjectAction->setEnabled(false); // Disabled until a project is active
+    connect(m_saveAsProjectAction, &QAction::triggered, this, &MainWindow::saveProjectAs);
 
     // Exit action
     m_exitAction = new QAction(tr("E&xit"), this);
@@ -130,10 +126,10 @@ void MainWindow::createMenus()
 {
     // File menu
     m_fileMenu = menuBar()->addMenu(tr("&File"));
-    m_fileMenu->addAction(m_newCodeAction);
-    m_fileMenu->addAction(m_openAction);
-    m_fileMenu->addAction(m_saveAction);
-    m_fileMenu->addAction(m_saveAsAction);
+    m_fileMenu->addAction(m_newProjectAction);
+    m_fileMenu->addAction(m_openProjectAction);
+    m_fileMenu->addAction(m_saveProjectAction);
+    m_fileMenu->addAction(m_saveAsProjectAction);
     m_fileMenu->addSeparator();
     m_fileMenu->addAction(m_exitAction);
 
@@ -143,9 +139,6 @@ void MainWindow::createMenus()
     // View menu (placeholder)
     m_viewMenu = menuBar()->addMenu(tr("&View"));
 
-    // Simulation menu (placeholder)
-    m_simulationMenu = menuBar()->addMenu(tr("&Simulation"));
-
     // Help menu (placeholder)
     m_helpMenu = menuBar()->addMenu(tr("&Help"));
 }
@@ -154,9 +147,9 @@ void MainWindow::createToolbars()
 {
     // File toolbar
     m_fileToolBar = addToolBar(tr("File"));
-    m_fileToolBar->addAction(m_newCodeAction);
-    m_fileToolBar->addAction(m_openAction);
-    m_fileToolBar->addAction(m_saveAction);
+    m_fileToolBar->addAction(m_newProjectAction);
+    m_fileToolBar->addAction(m_openProjectAction);
+    m_fileToolBar->addAction(m_saveProjectAction);
 }
 
 void MainWindow::createStatusBar()
@@ -191,14 +184,14 @@ void MainWindow::writeSettings()
     settings.setValue("windowState", saveState());
 }
 
-void MainWindow::newCodeDocument()
+void MainWindow::newProject()
 {
-    // Get a document name
+    // Get a project name
     bool ok;
     QString name = QInputDialog::getText(
         this,
-        tr("New Turing Machine"),
-        tr("Enter a name for the new machine:"),
+        tr("New Turing Machine Project"),
+        tr("Enter a name for the new project:"),
         QLineEdit::Normal,
         tr("Untitled"),
         &ok
@@ -208,142 +201,97 @@ void MainWindow::newCodeDocument()
         name = tr("Untitled");
     }
 
-    // Create a new code document
-    CodeDocument* document = DocumentManager::getInstance().createCodeDocument(name.toStdString());
+    // Create a new project
+    Project* project = ProjectManager::getInstance().createProject(name.toStdString());
 
-    // Open it in a tab
-    if (document) {
-        m_tabManager->openDocument(document);
-        statusBar()->showMessage(tr("Created new code document: %1").arg(name), 2000);
+    // Open the project in tabs
+    if (project) {
+        m_tabManager->openProject(project);
+        statusBar()->showMessage(tr("Created new project: %1").arg(name), 2000);
     }
 }
 
-void MainWindow::openDocument()
+void MainWindow::openProject()
 {
     QString filePath = QFileDialog::getOpenFileName(
         this,
-        tr("Open Document"),
+        tr("Open Project"),
         QString(),
-        tr("Turing Machine Files (*.tm);;Tape Files (*.tape);;All Files (*)")
+        tr("Turing Machine Projects (*.tmproj);;All Files (*)")
     );
 
     if (filePath.isEmpty()) return;
 
-    QFileInfo fileInfo(filePath);
-    QString extension = fileInfo.suffix().toLower();
-
-    // Determine document type from extension
-    if (extension == "tm") {
-        CodeDocument* document = DocumentManager::getInstance().openCodeDocument(filePath.toStdString());
-        if (document) {
-            m_tabManager->openDocument(document);
-            statusBar()->showMessage(tr("Opened code document: %1").arg(fileInfo.fileName()), 2000);
-        } else {
-            QMessageBox::warning(this, tr("Error"), tr("Failed to open the document"));
-        }
-    } else if (extension == "tape") {
-        // For tape documents, we need a code document
-        // In a real implementation, you would read the tape file to find the associated code document
-        // For simplicity, we'll assume the code document is already open or create a new one
-
-        CodeDocument* codeDoc = nullptr;
-
-        // Check if we have any open code documents
-        for (Document* doc : DocumentManager::getInstance().getAllDocuments()) {
-            if (doc->getType() == Document::DocumentType::CODE) {
-                codeDoc = static_cast<CodeDocument*>(doc);
-                break;
-            }
-        }
-
-        // If no code document is open, create one
-        if (!codeDoc) {
-            codeDoc = DocumentManager::getInstance().createCodeDocument("Untitled");
-        }
-
-        // Now open the tape document
-        TapeDocument* tapeDoc = DocumentManager::getInstance().openTapeDocument(
-            filePath.toStdString(),
-            codeDoc
-        );
-
-        if (tapeDoc) {
-            m_tabManager->openDocument(tapeDoc);
-            statusBar()->showMessage(tr("Opened tape document: %1").arg(fileInfo.fileName()), 2000);
-        } else {
-            QMessageBox::warning(this, tr("Error"), tr("Failed to open the tape document"));
-        }
-    } else {
-        QMessageBox::warning(this, tr("Error"), tr("Unknown file type"));
-    }
-}
-
-void MainWindow::saveDocument()
-{
-    if (!m_currentDocument) return;
-
-    if (m_currentDocument->getFilePath().empty()) {
-        saveDocumentAs();
+    // Check if already open
+    Project* existingProject = ProjectManager::getInstance().findProjectByPath(filePath.toStdString());
+    if (existingProject) {
+        // Just switch to the project's tabs
+        m_tabManager->openProject(existingProject);
+        statusBar()->showMessage(tr("Project already open: %1").arg(
+            QString::fromStdString(existingProject->getName())), 2000);
         return;
     }
 
-    if (DocumentManager::getInstance().saveDocument(m_currentDocument)) {
-        statusBar()->showMessage(tr("Document saved"), 2000);
+    // Try to open the project
+    Project* project = ProjectManager::getInstance().openProject(filePath.toStdString());
+
+    if (project) {
+        // Open the project's documents in tabs
+        m_tabManager->openProject(project);
+        statusBar()->showMessage(tr("Opened project: %1").arg(
+            QString::fromStdString(project->getName())), 2000);
+    } else {
+        QMessageBox::warning(this, tr("Error"), tr("Failed to open the project"));
+    }
+}
+
+void MainWindow::saveProject()
+{
+    if (!m_currentProject) return;
+
+    if (m_currentProject->getFilePath().empty()) {
+        saveProjectAs();
+        return;
+    }
+
+    if (ProjectManager::getInstance().saveProject(m_currentProject)) {
+        statusBar()->showMessage(tr("Project saved"), 2000);
+        updateWindowTitle();
     } else {
         QMessageBox::warning(
             this,
             tr("Save Error"),
-            tr("Failed to save the document")
+            tr("Failed to save the project")
         );
     }
 }
 
-void MainWindow::saveDocumentAs()
+void MainWindow::saveProjectAs()
 {
-    if (!m_currentDocument) return;
-
-    QString filter;
-    switch (m_currentDocument->getType()) {
-        case Document::DocumentType::CODE:
-            filter = tr("Turing Machine Files (*.tm)");
-            break;
-        case Document::DocumentType::TAPE:
-            filter = tr("Tape Files (*.tape)");
-            break;
-        default:
-            filter = tr("All Files (*)");
-            break;
-    }
+    if (!m_currentProject) return;
 
     QString filePath = QFileDialog::getSaveFileName(
         this,
-        tr("Save Document As"),
-        QString::fromStdString(m_currentDocument->getName()),
-        filter
+        tr("Save Project As"),
+        QString::fromStdString(m_currentProject->getName()),
+        tr("Turing Machine Projects (*.tmproj)")
     );
 
     if (filePath.isEmpty()) return;
 
     // Add extension if missing
-    QFileInfo fileInfo(filePath);
-    if (fileInfo.suffix().isEmpty()) {
-        switch (m_currentDocument->getType()) {
-            case Document::DocumentType::CODE:
-                filePath += ".tm";
-                break;
-            case Document::DocumentType::TAPE:
-                filePath += ".tape";
-                break;
-        }
+    if (!filePath.endsWith(".tmproj")) {
+        filePath += ".tmproj";
     }
 
-    if (DocumentManager::getInstance().saveDocumentAs(m_currentDocument, filePath.toStdString())) {
-        statusBar()->showMessage(tr("Document saved as %1").arg(filePath), 2000);
+    if (ProjectManager::getInstance().saveProjectAs(m_currentProject, filePath.toStdString())) {
+        statusBar()->showMessage(tr("Project saved as %1").arg(filePath), 2000);
+        updateWindowTitle();
     } else {
         QMessageBox::warning(
             this,
             tr("Save Error"),
-            tr("Failed to save the document as %1").arg(filePath)
+            tr("Failed to save the project as %1").arg(filePath)
         );
     }
 }
@@ -351,6 +299,14 @@ void MainWindow::saveDocumentAs()
 void MainWindow::onDocumentTabChanged(Document* document)
 {
     m_currentDocument = document;
+
+    // Update the current project
+    if (document) {
+        m_currentProject = document->getProject();
+    } else {
+        m_currentProject = nullptr;
+    }
+
     updateUIForDocument(document);
 }
 
@@ -363,51 +319,32 @@ void MainWindow::onDocumentTabClosed(Document* document)
     }
 }
 
-void MainWindow::onDocumentAdded(Document* document)
+void MainWindow::updateWindowTitle()
 {
-    // For automatic handling, open the document in a tab
-    m_tabManager->openDocument(document);
+    if (m_currentProject) {
+        QString title = QString::fromStdString(m_currentProject->getName());
+        if (m_currentProject->isModified()) {
+            title += "*";
+        }
+        setWindowTitle(title + " - Turing Machine Visualizer");
+    } else {
+        setWindowTitle("Turing Machine Visualizer");
+    }
 }
 
 void MainWindow::updateUIForDocument(Document* document)
 {
+    updateWindowTitle();
+
+    // Enable/disable actions based on having a document
+    m_saveProjectAction->setEnabled(m_currentProject != nullptr);
+    m_saveAsProjectAction->setEnabled(m_currentProject != nullptr);
+
+    // Update status bar
     if (document) {
-        // Update window title
-        QString title = QString::fromStdString(document->getName());
-        if (document->isModified()) {
-            title += "*";
-        }
-        setWindowTitle(title + " - Turing Machine Visualizer");
-
-        // Enable document-related actions
-        m_saveAction->setEnabled(true);
-        m_saveAsAction->setEnabled(true);
-
-        // Show document type in status bar
-        QString typeStr;
-        switch (document->getType()) {
-            case Document::DocumentType::CODE:
-                typeStr = tr("Code");
-                break;
-            case Document::DocumentType::TAPE:
-                typeStr = tr("Tape");
-                break;
-            default:
-                typeStr = tr("Unknown");
-                break;
-        }
-
-        statusBar()->showMessage(tr("%1 document: %2")
-            .arg(typeStr)
+        statusBar()->showMessage(tr("Document: %1")
             .arg(QString::fromStdString(document->getName())));
     } else {
-        // No document is active
-        setWindowTitle("Turing Machine Visualizer");
-
-        // Disable document-related actions
-        m_saveAction->setEnabled(false);
-        m_saveAsAction->setEnabled(false);
-
         statusBar()->showMessage(tr("No document selected"));
     }
 }

@@ -6,9 +6,13 @@
 
 class Document;
 class DocumentView;
+class Project;
 class QMenu;
+class TapeDocument;
 
-// Manages document tabs in the main window
+/**
+ * Manages document tabs in the main window
+ */
 class DocumentTabManager : public QTabWidget
 {
     Q_OBJECT
@@ -19,6 +23,9 @@ public:
 
     // Open document in a tab
     void openDocument(Document* document);
+
+    // Open a project - its documents will be opened in tabs
+    void openProject(Project* project);
 
     // Close specific document
     void closeDocument(Document* document);
@@ -38,6 +45,7 @@ public:
     void onCurrentChanged(int index);
     void onTabContextMenu(const QPoint& point);
     void onDocumentModified();
+    void onTapeAdded(TapeDocument* tapeDoc);
 
 private:
     std::map<Document*, DocumentView*> m_documentViews;

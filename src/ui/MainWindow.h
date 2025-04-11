@@ -4,11 +4,15 @@
 #include <memory>
 
 class DocumentTabManager;
-class Document;
 class QAction;
 class QMenu;
 class QToolBar;
+class Project;
+class Document;
 
+/**
+ * Main application window
+ */
 class MainWindow : public QMainWindow
 {
     Q_OBJECT
@@ -22,15 +26,14 @@ protected:
 
     private slots:
         // File menu actions
-        void newCodeDocument();
-    void openDocument();
-    void saveDocument();
-    void saveDocumentAs();
+        void newProject();
+    void openProject();
+    void saveProject();
+    void saveProjectAs();
 
-    // Document handling
+    // Tab handling
     void onDocumentTabChanged(Document* document);
     void onDocumentTabClosed(Document* document);
-    void onDocumentAdded(Document* document);
 
 private:
     // UI components
@@ -40,21 +43,21 @@ private:
     QMenu* m_fileMenu;
     QMenu* m_editMenu;
     QMenu* m_viewMenu;
-    QMenu* m_simulationMenu;
     QMenu* m_helpMenu;
 
     // Toolbars
     QToolBar* m_fileToolBar;
 
     // Actions
-    QAction* m_newCodeAction;
-    QAction* m_openAction;
-    QAction* m_saveAction;
-    QAction* m_saveAsAction;
+    QAction* m_newProjectAction;
+    QAction* m_openProjectAction;
+    QAction* m_saveProjectAction;
+    QAction* m_saveAsProjectAction;
     QAction* m_exitAction;
 
-    // Current document
+    // Current document and project
     Document* m_currentDocument;
+    Project* m_currentProject;
 
     // Setup methods
     void createActions();
@@ -66,6 +69,7 @@ private:
     void readSettings();
     void writeSettings();
 
-    // Update UI based on current document
+    // Update UI
+    void updateWindowTitle();
     void updateUIForDocument(Document* document);
 };

@@ -1,10 +1,14 @@
 #pragma once
 
 #include <string>
-#include <memory>
 #include <QObject>
 
-// Base document class for all openable documents
+// Forward declaration
+class Project;
+
+/**
+ * Base document class for all openable documents
+ */
 class Document : public QObject
 {
     Q_OBJECT
@@ -15,31 +19,29 @@ public:
         TAPE        // Tape visualization
     };
 
-    Document(DocumentType type, const std::string& name = "Untitled");
+    Document(Project* project, DocumentType type, const std::string& name = "Untitled");
     virtual ~Document();
 
     // Document properties
     DocumentType getType() const { return m_type; }
+
+    std::string getId() const { return m_id; }
+
     std::string getName() const { return m_name; }
     void setName(const std::string& name);
-    
-    std::string getFilePath() const { return m_filePath; }
-    void setFilePath(const std::string& path);
-    
-    bool isModified() const { return m_isModified; }
-    void setModified(bool modified);
 
-    // Serialization
-    virtual bool saveToFile(const std::string& filePath) = 0;
-    virtual bool loadFromFile(const std::string& filePath) = 0;
+    // Project access
+    Project* getProject() const { return m_project; }
 
-signals:
-    void nameChanged(const std::string& newName);
-    void modificationChanged(bool modified);
+    signals:
+        void nameChanged(const std::string& newName);
+
+protected:
+    static std::string generateUniqueId();
 
 private:
+    Project* m_project;    // Non-owning reference to parent project
     DocumentType m_type;
+    std::string m_id;      // Unique identifier
     std::string m_name;
-    std::string m_filePath;
-    bool m_isModified;
 };

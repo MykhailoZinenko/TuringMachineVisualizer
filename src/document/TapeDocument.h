@@ -5,34 +5,39 @@
 #include <string>
 
 class Tape;
-class CodeDocument;
 
-// Document representing a tape visualization linked to a code document
+/**
+ * Document representing a tape for visualization and simulation
+ */
 class TapeDocument : public Document
 {
     Q_OBJECT
 
 public:
-    TapeDocument(CodeDocument* codeDocument, const std::string& name = "Tape");
+    TapeDocument(Project* project, const std::string& id, const std::string& name = "Tape");
     ~TapeDocument() override;
 
     // Tape access
     Tape* getTape() const { return m_tape.get(); }
-    
-    // Code document access
-    CodeDocument* getCodeDocument() const { return m_codeDocument; }
-    
+
     // Tape configuration
     void setInitialContent(const std::string& content);
     void setInitialHeadPosition(int position);
-    
-    // Serialization
-    bool saveToFile(const std::string& filePath) override;
-    bool loadFromFile(const std::string& filePath) override;
+
+    // Execution methods
+    bool step();
+    void reset();
+    void run();
+    void pause();
+    bool canStepBackward() const;
+    bool stepBackward();
+
+    signals:
+        void tapeContentChanged();
+    void executionStateChanged();
 
 private:
     std::unique_ptr<Tape> m_tape;
-    CodeDocument* m_codeDocument;  // Non-owning reference
     std::string m_initialContent;
     int m_initialHeadPosition;
 };

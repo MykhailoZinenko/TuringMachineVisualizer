@@ -1,7 +1,9 @@
 #include "Document.h"
+#include "../project/Project.h"
+#include <QUuid>
 
-Document::Document(DocumentType type, const std::string& name)
-    : m_type(type), m_name(name), m_isModified(false)
+Document::Document(Project* project, DocumentType type, const std::string& name)
+    : m_project(project), m_type(type), m_id(generateUniqueId()), m_name(name)
 {
 }
 
@@ -14,18 +16,21 @@ void Document::setName(const std::string& name)
     if (m_name != name) {
         m_name = name;
         emit nameChanged(m_name);
+
+        // Mark the project as modified
+        if (m_project) {
+            m_project->setModified(true);
+        }
     }
 }
 
-void Document::setFilePath(const std::string& path)
+std::string Document::generateUniqueId()
 {
-    m_filePath = path;
-}
+    // Generate a unique ID using QUuid
+    QString uuid = QUuid::createUuid().toString();
 
-void Document::setModified(bool modified)
-{
-    if (m_isModified != modified) {
-        m_isModified = modified;
-        emit modificationChanged(m_isModified);
-    }
+    // Remove curly braces from the UUID
+    uuid.remove('{').remove('}');
+
+    return "doc_" + uuid.toStdString();
 }

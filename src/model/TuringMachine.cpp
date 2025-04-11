@@ -4,22 +4,19 @@
 #include <nlohmann/json.hpp>
 #include <QtCore/qstring.h>
 #include <qdebug.h>
-#include <QUuid>
 
 using json = nlohmann::json;
 
 // Constructor & destructor
 TuringMachine::TuringMachine(const std::string& name, MachineType type)
-    : name(name), type(type), status(ExecutionStatus::READY),
-      stepCount(0), maxHistorySize(1000), historyPosition(-1),
-      activeTapeIndex(0)
+    : name(name), type(type), activeTape(nullptr), status(ExecutionStatus::READY),
+      stepCount(0), maxHistorySize(1000), historyPosition(-1)
 {
-    // Create a default tape
-    createTape("Default");
 }
 
 TuringMachine::~TuringMachine()
 {
+    // We don't own activeTape, so we don't delete it
 }
 
 // Machine configuration
@@ -167,148 +164,20 @@ std::vector<Transition*> TuringMachine::getAllTransitions() const
     return result;
 }
 
-// Tape management
-Tape* TuringMachine::createTape(const std::string& name)
+// Tape operations
+void TuringMachine::setTape(Tape* tape)
 {
-    std::string id = generateUniqueTapeId();
-    tapes.emplace_back(id, name);
-
-    // If this is the first tape, make it active
-    if (tapes.size() == 1) {
-        activeTapeIndex = 0;
-    }
-
-    return tapes.back().tape.get();
+    activeTape = tape;
 }
 
-Tape* TuringMachine::getTape(const std::string& tapeId)
+// Code management
+void TuringMachine::setOriginalCode(const std::string& code)
 {
-    for (auto& tapeInfo : tapes) {
-        if (tapeInfo.id == tapeId) {
-            return tapeInfo.tape.get();
-        }
-    }
-    return nullptr;
-}
-
-// Keep the existing non-const implementation
-void TuringMachine::setActiveTape(Tape* tape)
-{
-    if (!tape) return;
-
-    // Find if we already have this tape
-    for (size_t i = 0; i < tapes.size(); i++) {
-        if (tapes[i].tape.get() == tape) {
-            activeTapeIndex = i;
-            return;
-        }
-    }
-
-    // If we don't have it, create a temporary external tape reference
-    // Note: This tape won't be owned by the machine
-    // It's just a temporary reference for the current operation
-    m_externalTape = tape;
-}
-
-// Then modify getActiveTape() to check for external tape first
-Tape* TuringMachine::getActiveTape()
-{
-    // First check if we have an external tape set
-    if (m_externalTape) {
-        return m_externalTape;
-    }
-
-    // Otherwise use the tape from our collection
-    if (tapes.empty()) {
-        return createTape("Default");
-    }
-
-    // Ensure active tape index is valid
-    if (activeTapeIndex >= tapes.size()) {
-        activeTapeIndex = 0;
-    }
-
-    return tapes[activeTapeIndex].tape.get();
-}
-
-// Add const version that doesn't modify the object
-const Tape* TuringMachine::getActiveTape() const
-{
-    if (tapes.empty()) {
-        return nullptr;  // Cannot create a tape in a const method
-    }
-
-    // Use a local copy to check bounds without modifying the object
-    size_t safeIndex = activeTapeIndex;
-    if (safeIndex >= tapes.size()) {
-        safeIndex = 0;
-    }
-
-    return tapes[safeIndex].tape.get();
-}
-
-void TuringMachine::setActiveTape(const std::string& tapeId)
-{
-    for (size_t i = 0; i < tapes.size(); i++) {
-        if (tapes[i].id == tapeId) {
-            activeTapeIndex = i;
-            return;
-        }
-    }
-}
-
-std::vector<std::string> TuringMachine::getTapeIds() const
-{
-    std::vector<std::string> ids;
-    for (const auto& tapeInfo : tapes) {
-        ids.push_back(tapeInfo.id);
-    }
-    return ids;
-}
-
-std::string TuringMachine::getTapeName(const std::string& tapeId) const
-{
-    for (const auto& tapeInfo : tapes) {
-        if (tapeInfo.id == tapeId) {
-            return tapeInfo.name;
-        }
-    }
-    return "";
-}
-
-void TuringMachine::setTapeContent(const std::string& content)
-{
-    Tape* tape = getActiveTape();
-    tape->setInitialContent(content);
-}
-
-std::string TuringMachine::getTapeContent() const
-{
-    if (tapes.empty()) {
-        return "";
-    }
-
-    // Use the active tape
-    const Tape* tape = tapes[activeTapeIndex].tape.get();
-    return tape->getCurrentContent(50);
-}
-
-std::string TuringMachine::generateUniqueTapeId() const
-{
-    // Generate a unique ID for a tape using QUuid
-    QString uuid = QUuid::createUuid().toString();
-
-    // Remove curly braces from the UUID
-    uuid.remove('{').remove('}');
-
-    return "tape_" + uuid.toStdString();
-}
-
-void TuringMachine::setOriginalCode(const std::string& code) {
     m_originalCode = code;
 }
 
-std::string TuringMachine::getOriginalCode() const {
+std::string TuringMachine::getOriginalCode() const
+{
     return m_originalCode;
 }
 
@@ -323,8 +192,10 @@ void TuringMachine::reset()
         currentState = "";
     }
 
-    Tape* tape = getActiveTape();
-    tape->reset();
+    if (activeTape) {
+        activeTape->reset();
+    }
+
     status = ExecutionStatus::READY;
     stepCount = 0;
     clearHistory();
@@ -334,8 +205,10 @@ void TuringMachine::reset()
 
 bool TuringMachine::step()
 {
-    Tape* tape = getActiveTape();
-    if (!tape) return false;
+    if (!activeTape) {
+        qWarning() << "Cannot step: no active tape set";
+        return false;
+    }
 
     if (status == ExecutionStatus::HALTED_ACCEPT ||
         status == ExecutionStatus::HALTED_REJECT ||
@@ -343,12 +216,14 @@ bool TuringMachine::step()
         return false;
     }
 
+    // Temporarily set to RUNNING
+    ExecutionStatus oldStatus = status;
     status = ExecutionStatus::RUNNING;
 
     State* state = getState(currentState);
     if (!state) {
         status = ExecutionStatus::ERROR;
-        qDebug() << "Error: No valid state" << QString::fromStdString(currentState);
+        qWarning() << "Error: No valid state" << QString::fromStdString(currentState);
         return false;
     }
 
@@ -362,36 +237,30 @@ bool TuringMachine::step()
         return false;
     }
 
-    std::string symbol = tape->read();
-    qDebug() << "Current state:" << QString::fromStdString(currentState)
-             << "Read symbol:" << QString::fromStdString(symbol);
-
+    std::string symbol = activeTape->read();
     Transition* transition = getTransition(currentState, symbol);
+
     if (!transition) {
         // Try with the blank symbol as a fallback
-        transition = getTransition(currentState, std::string(1, tape->getBlankSymbol()));
+        transition = getTransition(currentState, std::string(1, activeTape->getBlankSymbol()));
     }
 
     if (!transition) {
         status = ExecutionStatus::ERROR;
-        qDebug() << "Error: No transition found for state" << QString::fromStdString(currentState)
+        qWarning() << "Error: No transition found for state" << QString::fromStdString(currentState)
                  << "and symbol" << QString::fromStdString(symbol);
         return false;
     }
 
-    qDebug() << "Applying transition: Write" << QString::fromStdString(transition->getWriteSymbol())
-             << "Move" << static_cast<int>(transition->getDirection())
-             << "To state" << QString::fromStdString(transition->getToState());
-
-    // Apply the transition
-    tape->write(transition->getWriteSymbol());
+    // Execute the transition
+    activeTape->write(transition->getWriteSymbol());
 
     switch (transition->getDirection()) {
         case Direction::LEFT:
-            tape->moveLeft();
+            activeTape->moveLeft();
             break;
         case Direction::RIGHT:
-            tape->moveRight();
+            activeTape->moveRight();
             break;
         case Direction::STAY:
             break;
@@ -401,6 +270,13 @@ bool TuringMachine::step()
 
     stepCount++;
     addToHistory(createSnapshot());
+
+    // Set back to PAUSED or original state after a single step
+    if (oldStatus == ExecutionStatus::PAUSED || oldStatus == ExecutionStatus::READY) {
+        status = oldStatus;
+    } else {
+        status = ExecutionStatus::PAUSED;
+    }
 
     return true;
 }
@@ -424,6 +300,11 @@ bool TuringMachine::canStepBackward() const
 
 bool TuringMachine::stepBackward()
 {
+    if (!activeTape) {
+        qWarning() << "Cannot step backward: no active tape set";
+        return false;
+    }
+
     if (!canStepBackward()) {
         return false;
     }
@@ -480,21 +361,9 @@ std::string TuringMachine::toJson() const
     j["name"] = name;
     j["type"] = static_cast<int>(type);
     j["currentState"] = currentState;
-    j["originalCode"] = m_originalCode;  // Store the original code
+    j["originalCode"] = m_originalCode;
 
-    // Save all tapes
-    json tapesJson = json::array();
-    for (const auto& tapeInfo : tapes) {
-        json tapeJson;
-        tapeJson["id"] = tapeInfo.id;
-        tapeJson["name"] = tapeInfo.name;
-        tapeJson["content"] = tapeInfo.tape->getCurrentContent();
-        tapeJson["headPosition"] = tapeInfo.tape->getHeadPosition();
-        tapesJson.push_back(tapeJson);
-    }
-    j["tapes"] = tapesJson;
-    j["activeTapeIndex"] = activeTapeIndex;
-
+    // Save states
     json statesJson = json::array();
     for (const auto& pair : states) {
         statesJson.push_back(json{
@@ -507,6 +376,7 @@ std::string TuringMachine::toJson() const
     }
     j["states"] = statesJson;
 
+    // Save transitions
     json transitionsJson = json::array();
     for (const auto& pair : transitions) {
         transitionsJson.push_back(json{
@@ -519,133 +389,77 @@ std::string TuringMachine::toJson() const
     }
     j["transitions"] = transitionsJson;
 
-    qDebug() << "Saving machine with:" << states.size() << "states,"
-             << transitions.size() << "transitions, and"
-             << tapes.size() << "tapes";
-    qDebug() << "Original code size:" << m_originalCode.size() << "bytes";
+    qDebug() << "Saving machine with:" << states.size() << "states and" << transitions.size() << "transitions";
 
     return j.dump(4);
 }
 
 std::unique_ptr<TuringMachine> TuringMachine::fromJson(const std::string& jsonStr)
 {
-    qDebug() << "Parsing JSON string of length:" << jsonStr.length();
-
     try {
         json j = json::parse(jsonStr);
 
         auto machine = std::make_unique<TuringMachine>(j.value("name", "Untitled"),
                                                       static_cast<MachineType>(j.value("type", 0)));
 
-        // Clear default tape(s)
-        machine->tapes.clear();
-        machine->activeTapeIndex = 0;
-
-        // Load tapes
-        if (j.contains("tapes") && j["tapes"].is_array()) {
-            qDebug() << "Found tapes array with" << j["tapes"].size() << "tapes";
-
-            for (const auto& tapeJson : j["tapes"]) {
-                std::string id = tapeJson.contains("id") ? tapeJson["id"].get<std::string>() : machine->generateUniqueTapeId();
-                std::string name = tapeJson.contains("name") ? tapeJson["name"].get<std::string>() : "Tape";
-
-                machine->tapes.emplace_back(id, name);
-                Tape* tape = machine->tapes.back().tape.get();
-
-                // Set tape content
-                if (tapeJson.contains("content") && tapeJson["content"].is_string()) {
-                    tape->setInitialContent(tapeJson["content"].get<std::string>());
-                }
-
-                // Set head position
-                if (tapeJson.contains("headPosition") && tapeJson["headPosition"].is_number()) {
-                    tape->setHeadPosition(tapeJson["headPosition"].get<int>());
-                }
-            }
-
-            // Set active tape index
-            if (j.contains("activeTapeIndex") && j["activeTapeIndex"].is_number()) {
-                size_t index = j["activeTapeIndex"].get<size_t>();
-                if (index < machine->tapes.size()) {
-                    machine->activeTapeIndex = index;
-                }
-            }
-        } else {
-            // Create a default tape if none was loaded
-            machine->createTape("Default");
-        }
-
         // Load original code if present
-        if (j.contains("originalCode") && j["originalCode"].is_string()) {
-            std::string code = j["originalCode"].get<std::string>();
-            machine->setOriginalCode(code);
-            qDebug() << "Loaded original code, size:" << code.size() << "bytes";
+        if (j.contains("originalCode")) {
+            machine->setOriginalCode(j["originalCode"]);
         }
 
+        // Load states
         if (j.contains("states") && j["states"].is_array()) {
-            qDebug() << "Found states array with" << j["states"].size() << "states";
-
             for (const auto& stateJson : j["states"]) {
                 try {
                     std::string id = stateJson["id"];
                     std::string name = stateJson["name"];
                     StateType type = static_cast<StateType>(stateJson["type"].get<int>());
 
-                    qDebug() << "Adding state:" << QString::fromStdString(id);
                     machine->addState(id, name, type);
 
                     State* state = machine->getState(id);
-                    if (state) {
-                        state->setPosition(Point2D(stateJson["posX"].get<float>(),
-                                                 stateJson["posY"].get<float>()));
+                    if (state && stateJson.contains("posX") && stateJson.contains("posY")) {
+                        state->setPosition(Point2D(stateJson["posX"], stateJson["posY"]));
                     }
                 } catch (const std::exception& e) {
-                    qWarning() << "Error restoring state:" << e.what();
+                    qWarning() << "Error loading state:" << e.what();
                 }
             }
-        } else {
-            qWarning() << "No states array found in JSON";
         }
 
-        int transitionCount = 0;
+        // Load transitions
         if (j.contains("transitions") && j["transitions"].is_array()) {
-            qDebug() << "Found transitions array with" << j["transitions"].size() << "transitions";
-
             for (const auto& transJson : j["transitions"]) {
                 try {
                     std::string fromState = transJson["fromState"];
                     std::string readSymbol;
 
-                    // Handle readSymbol which could be a string or a single character in older files
+                    // Handle readSymbol
                     if (transJson["readSymbol"].is_string()) {
-                        readSymbol = transJson["readSymbol"].get<std::string>();
+                        readSymbol = transJson["readSymbol"];
                     } else if (transJson["readSymbol"].is_number()) {
-                        // For backwards compatibility with older files that stored a char as a number
+                        // For backwards compatibility with older files
                         char readChar = static_cast<char>(transJson["readSymbol"].get<int>());
                         readSymbol = std::string(1, readChar);
                     } else {
-                        // Default
                         readSymbol = "_";
                     }
 
                     std::string toState = transJson["toState"];
                     std::string writeSymbol;
 
-                    // Handle writeSymbol which could be a string or a single character
+                    // Handle writeSymbol
                     if (transJson["writeSymbol"].is_string()) {
-                        writeSymbol = transJson["writeSymbol"].get<std::string>();
+                        writeSymbol = transJson["writeSymbol"];
                     } else if (transJson["writeSymbol"].is_number()) {
                         // For backwards compatibility
                         char writeChar = static_cast<char>(transJson["writeSymbol"].get<int>());
                         writeSymbol = std::string(1, writeChar);
                     } else {
-                        // Default
                         writeSymbol = "_";
                     }
 
                     Direction direction = static_cast<Direction>(transJson["direction"].get<int>());
-
-                    qDebug() << "Adding transition from" << QString::fromStdString(fromState) << "on" << QString::fromStdString(readSymbol);
 
                     machine->addTransition(
                         fromState,
@@ -654,30 +468,25 @@ std::unique_ptr<TuringMachine> TuringMachine::fromJson(const std::string& jsonSt
                         writeSymbol,
                         direction
                     );
-
-                    transitionCount++;
-                    qDebug() << "TuringMachine::addTransition" << transitionCount;
                 } catch (const std::exception& e) {
-                    qWarning() << "Error restoring transition:" << e.what();
+                    qWarning() << "Error loading transition:" << e.what();
                 }
             }
-        } else {
-            qWarning() << "No transitions array found in JSON";
         }
 
-        // Load current state
-        machine->currentState = j.value("currentState", machine->getStartState());
-
-        qDebug() << "Machine loaded with" << machine->getAllStates().size() << "states and"
-                 << machine->getAllTransitions().size() << "transitions and"
-                 << machine->tapes.size() << "tapes";
+        // Set current state
+        if (j.contains("currentState")) {
+            machine->currentState = j["currentState"];
+        } else {
+            machine->currentState = machine->getStartState();
+        }
 
         return machine;
     } catch (const json::exception& e) {
         qCritical() << "JSON parsing error:" << e.what();
         throw;
     } catch (const std::exception& e) {
-        qCritical() << "General error in fromJson:" << e.what();
+        qCritical() << "Error in fromJson:" << e.what();
         throw;
     }
 }
@@ -685,19 +494,22 @@ std::unique_ptr<TuringMachine> TuringMachine::fromJson(const std::string& jsonSt
 // Helper methods
 ExecutionSnapshot TuringMachine::createSnapshot() const
 {
-    const Tape* tape = getActiveTape();
+    if (!activeTape) {
+        // Return an empty snapshot if no tape is set
+        return ExecutionSnapshot{};
+    }
 
     ExecutionSnapshot snapshot;
     snapshot.currentState = currentState;
-    snapshot.headPosition = tape->getHeadPosition();
+    snapshot.headPosition = activeTape->getHeadPosition();
 
     // Get the tape content
-    int left = tape->getLeftmostUsedPosition();
-    int right = tape->getRightmostUsedPosition();
+    int left = activeTape->getLeftmostUsedPosition();
+    int right = activeTape->getRightmostUsedPosition();
 
-    auto visibleCells = tape->getVisiblePortion(left, right - left + 1);
+    auto visibleCells = activeTape->getVisiblePortion(left, right - left + 1);
     for (const auto& cell : visibleCells) {
-        if (cell.second != std::string(1, tape->getBlankSymbol())) {
+        if (cell.second != std::string(1, activeTape->getBlankSymbol())) {
             snapshot.tapeContent[cell.first] = cell.second;
         }
     }
@@ -707,17 +519,20 @@ ExecutionSnapshot TuringMachine::createSnapshot() const
 
 void TuringMachine::restoreSnapshot(const ExecutionSnapshot& snapshot)
 {
-    currentState = snapshot.currentState;
-
-    Tape* tape = getActiveTape();
-    tape->reset();
-
-    for (const auto& pair : snapshot.tapeContent) {
-        tape->setHeadPosition(pair.first);
-        tape->write(pair.second);
+    if (!activeTape) {
+        return;
     }
 
-    tape->setHeadPosition(snapshot.headPosition);
+    currentState = snapshot.currentState;
+
+    activeTape->reset();
+
+    for (const auto& pair : snapshot.tapeContent) {
+        activeTape->setHeadPosition(pair.first);
+        activeTape->write(pair.second);
+    }
+
+    activeTape->setHeadPosition(snapshot.headPosition);
 }
 
 void TuringMachine::clearHistory()

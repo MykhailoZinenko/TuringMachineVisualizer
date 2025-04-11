@@ -8,7 +8,9 @@ class QTextEdit;
 class QPushButton;
 class QLabel;
 
-// View for editing Turing machine code
+/**
+ * View for editing Turing machine code
+ */
 class CodeEditorView : public DocumentView
 {
     Q_OBJECT

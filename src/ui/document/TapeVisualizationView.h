@@ -11,7 +11,9 @@ class QSpinBox;
 class QLabel;
 class QTimer;
 
-// View for visualizing and running a tape
+/**
+ * View for visualizing and running a tape
+ */
 class TapeVisualizationView : public DocumentView
 {
     Q_OBJECT
@@ -32,6 +34,8 @@ public:
     void stepBackward();
     void onTapeContentChanged();
     void onSimulationSpeed(int value);
+    void onSimulationTimerTick();
+    void onExecutionStateChanged();
 
 private:
     TapeDocument* m_tapeDocument;
