@@ -39,6 +39,18 @@ struct ExecutionSnapshot {
     }
 };
 
+// A structure to hold tape information with name and ID
+struct TapeInfo {
+    std::unique_ptr<Tape> tape;
+    std::string name;
+    std::string id;  // Unique identifier for the tape
+
+    TapeInfo(const std::string& id, const std::string& name)
+        : name(name), id(id) {
+        tape = std::make_unique<Tape>();
+    }
+};
+
 class TuringMachine {
 public:
     // Constructor & destructor
@@ -70,10 +82,18 @@ public:
     std::vector<Transition*> getAllTransitions() const;
 
     // Tape management
-    Tape* getTape();
-    void setTapeContent(const std::string& content);
-    std::string getTapeContent() const;
+    Tape* createTape(const std::string& name); // Creates a new tape and returns it
+    Tape* getTape(const std::string& tapeId);  // Get tape by ID
+    void setActiveTape(Tape* tape);
+    Tape* getActiveTape(); // Get the current active tape
+    const Tape* getActiveTape() const;
+    void setActiveTape(const std::string& tapeId); // Set which tape is active
+    std::vector<std::string> getTapeIds() const;   // Get all tape IDs
+    std::string getTapeName(const std::string& tapeId) const; // Get name of a tape
+    void setTapeContent(const std::string& content);  // Set content for active tape
+    std::string getTapeContent() const;               // Get content from active tape
 
+    // Code management
     void setOriginalCode(const std::string& code);
     std::string getOriginalCode() const;
 
@@ -100,8 +120,12 @@ private:
     std::string name;
     MachineType type;
     std::map<std::string, std::unique_ptr<State>> states;
-    std::map<std::pair<std::string, std::string>, std::unique_ptr<Transition>> transitions;  // Changed key to use string
-    std::unique_ptr<Tape> tape;
+    std::map<std::pair<std::string, std::string>, std::unique_ptr<Transition>> transitions;
+
+    // Tape collection
+    std::vector<TapeInfo> tapes;
+    Tape* m_externalTape;
+    size_t activeTapeIndex;
 
     std::string currentState;
     ExecutionStatus status;
@@ -119,4 +143,5 @@ private:
     void restoreSnapshot(const ExecutionSnapshot& snapshot);
     void clearHistory();
     void addToHistory(const ExecutionSnapshot& snapshot);
+    std::string generateUniqueTapeId() const;
 };

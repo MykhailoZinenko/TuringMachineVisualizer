@@ -49,6 +49,9 @@ set(SOURCES
         src/model/State.cpp
         src/model/Transition.cpp
         src/model/TuringMachine.cpp
+
+        # Parser
+        src/parser/CodeParser.cpp
 )
 
 # Set header files
@@ -84,6 +87,9 @@ set(HEADERS
         src/model/State.h
         src/model/Transition.h
         src/model/TuringMachine.h
+
+        # Parser
+        src/parser/CodeParser.h
 )
 
 # Include directories

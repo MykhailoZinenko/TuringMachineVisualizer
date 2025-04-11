@@ -1,5 +1,6 @@
 #include "CodeDocument.h"
 #include "../model/TuringMachine.h"
+#include "../parser/CodeParser.h"
 #include <QFile>
 #include <QTextStream>
 #include <QFileInfo>
@@ -30,16 +31,22 @@ void CodeDocument::setCode(const std::string& code)
 {
     if (m_code != code) {
         m_code = code;
-        m_machine->setOriginalCode(code);
-        
-        // Parse code and update machine
-        // This would typically call a parser to update the machine's states and transitions
-        
+
+        // Use the parser to update the machine from the code
+        CodeParser parser;
+        bool success = parser.parseAndUpdateMachine(m_machine.get(), m_code);
+
+        if (!success) {
+            qWarning() << "Failed to parse code and update machine";
+        }
+
+        // Store the code in the machine for serialization
+        m_machine->setOriginalCode(m_code);
+
         setModified(true);
         emit codeChanged(m_code);
     }
 }
-
 bool CodeDocument::saveToFile(const std::string& filePath)
 {
     QFile file(QString::fromStdString(filePath));

@@ -7,6 +7,8 @@
 #include <QFileInfo>
 #include <QDebug>
 
+#include "model/TuringMachine.h"
+
 TapeDocument::TapeDocument(CodeDocument* codeDocument, const std::string& name)
     : Document(DocumentType::TAPE, name),
       m_codeDocument(codeDocument),
@@ -14,6 +16,10 @@ TapeDocument::TapeDocument(CodeDocument* codeDocument, const std::string& name)
 {
     // Create a new tape
     m_tape = std::make_unique<Tape>();
+
+    if (codeDocument && codeDocument->getMachine()) {
+        codeDocument->getMachine()->setActiveTape(m_tape.get());
+    }
 }
 
 TapeDocument::~TapeDocument()

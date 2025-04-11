@@ -31,10 +31,11 @@ TapeVisualizationView::~TapeVisualizationView()
     delete m_simulationTimer;
 }
 
+// Update setupUI method to better integrate TapeWidget
 void TapeVisualizationView::setupUI()
 {
     QVBoxLayout* mainLayout = new QVBoxLayout(this);
-    
+
     // Header with code reference
     QLabel* headerLabel = new QLabel(tr("Tape: %1 (Machine: %2)")
         .arg(QString::fromStdString(m_tapeDocument->getName()))
@@ -44,85 +45,104 @@ void TapeVisualizationView::setupUI()
     headerFont.setPointSize(headerFont.pointSize() + 1);
     headerLabel->setFont(headerFont);
     mainLayout->addWidget(headerLabel);
-    
+
     // Tape widget
     m_tapeWidget = new TapeWidget(this);
+    m_tapeWidget->setMinimumHeight(150);
     m_tapeWidget->setTape(m_tapeDocument->getTape());
     mainLayout->addWidget(m_tapeWidget, 1);
-    
+
     // Tape content setup group
     QGroupBox* contentGroup = new QGroupBox(tr("Tape Setup"), this);
     QVBoxLayout* contentLayout = new QVBoxLayout(contentGroup);
-    
+
     QHBoxLayout* inputLayout = new QHBoxLayout();
     inputLayout->addWidget(new QLabel(tr("Initial Content:"), this));
     m_contentEdit = new QLineEdit(this);
     inputLayout->addWidget(m_contentEdit, 1);
-    
+
     inputLayout->addWidget(new QLabel(tr("Head Position:"), this));
     m_headPositionSpin = new QSpinBox(this);
     m_headPositionSpin->setMinimum(0);
     m_headPositionSpin->setMaximum(999);
     inputLayout->addWidget(m_headPositionSpin);
-    
+
     contentLayout->addLayout(inputLayout);
-    
+
     QHBoxLayout* buttonLayout = new QHBoxLayout();
     m_setButton = new QPushButton(tr("Set Tape"), this);
     connect(m_setButton, &QPushButton::clicked, this, &TapeVisualizationView::setTapeContent);
     buttonLayout->addWidget(m_setButton);
-    
+
     m_resetButton = new QPushButton(tr("Reset Tape"), this);
     connect(m_resetButton, &QPushButton::clicked, this, &TapeVisualizationView::resetTape);
     buttonLayout->addWidget(m_resetButton);
-    
+
+    // Add zoom controls
+    QPushButton* zoomInButton = new QPushButton(tr("+"), this);
+    connect(zoomInButton, &QPushButton::clicked, m_tapeWidget, &TapeWidget::zoomIn);
+    buttonLayout->addWidget(zoomInButton);
+
+    QPushButton* zoomOutButton = new QPushButton(tr("-"), this);
+    connect(zoomOutButton, &QPushButton::clicked, m_tapeWidget, &TapeWidget::zoomOut);
+    buttonLayout->addWidget(zoomOutButton);
+
+    QPushButton* resetZoomButton = new QPushButton(tr("Reset Zoom"), this);
+    connect(resetZoomButton, &QPushButton::clicked, m_tapeWidget, &TapeWidget::resetZoom);
+    buttonLayout->addWidget(resetZoomButton);
+
     contentLayout->addLayout(buttonLayout);
     mainLayout->addWidget(contentGroup);
-    
+
     // Simulation controls group
     QGroupBox* simulationGroup = new QGroupBox(tr("Simulation"), this);
     QVBoxLayout* simulationLayout = new QVBoxLayout(simulationGroup);
-    
+
     QHBoxLayout* controlsLayout = new QHBoxLayout();
     m_runButton = new QPushButton(tr("Run"), this);
     connect(m_runButton, &QPushButton::clicked, this, &TapeVisualizationView::runSimulation);
     controlsLayout->addWidget(m_runButton);
-    
+
     m_pauseButton = new QPushButton(tr("Pause"), this);
     connect(m_pauseButton, &QPushButton::clicked, this, &TapeVisualizationView::pauseSimulation);
     m_pauseButton->setEnabled(false);
     controlsLayout->addWidget(m_pauseButton);
-    
+
     m_stepForwardButton = new QPushButton(tr("Step >"), this);
     connect(m_stepForwardButton, &QPushButton::clicked, this, &TapeVisualizationView::stepForward);
     controlsLayout->addWidget(m_stepForwardButton);
-    
+
     m_stepBackwardButton = new QPushButton(tr("< Step"), this);
     connect(m_stepBackwardButton, &QPushButton::clicked, this, &TapeVisualizationView::stepBackward);
     m_stepBackwardButton->setEnabled(false);
     controlsLayout->addWidget(m_stepBackwardButton);
-    
+
     simulationLayout->addLayout(controlsLayout);
-    
+
     // Speed slider
     QHBoxLayout* speedLayout = new QHBoxLayout();
     speedLayout->addWidget(new QLabel(tr("Speed:"), this));
-    
+
     QSlider* speedSlider = new QSlider(Qt::Horizontal, this);
     speedSlider->setRange(50, 1000);
     speedSlider->setValue(m_simulationSpeed);
     speedSlider->setInvertedAppearance(true);  // Faster to the right
     connect(speedSlider, &QSlider::valueChanged, this, &TapeVisualizationView::onSimulationSpeed);
     speedLayout->addWidget(speedSlider, 1);
-    
+
+    QLabel* speedValueLabel = new QLabel(QString::number(m_simulationSpeed) + " ms", this);
+    connect(speedSlider, &QSlider::valueChanged,
+            [speedValueLabel](int value) { speedValueLabel->setText(QString::number(value) + " ms"); });
+    speedLayout->addWidget(speedValueLabel);
+
     simulationLayout->addLayout(speedLayout);
-    
+
     mainLayout->addWidget(simulationGroup);
-    
+
     // Status label
     m_statusLabel = new QLabel(tr("Ready"), this);
     mainLayout->addWidget(m_statusLabel);
-    
+
     // Connect tape signals
     connect(m_tapeWidget, &TapeWidget::tapeModified, this, &TapeVisualizationView::onTapeContentChanged);
 }
@@ -234,6 +254,8 @@ void TapeVisualizationView::stepForward()
         setStatusMessage(tr("No machine available"), true);
         return;
     }
+
+    machine->setActiveTape(m_tapeDocument->getTape());
     
     if (machine->step()) {
         m_tapeWidget->onStepExecuted();
