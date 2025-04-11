@@ -8,7 +8,7 @@ int main(int argc, char *argv[])
     // Set application metadata
     QCoreApplication::setOrganizationName("YourOrganization");
     QCoreApplication::setApplicationName("Turing Machine Visualizer");
-    QCoreApplication::setApplicationVersion("0.1");
+    QCoreApplication::setApplicationVersion("0.2");
 
     // Create and show the main window
     MainWindow mainWindow;
