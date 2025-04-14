@@ -47,17 +47,9 @@ set(SOURCES
         src/ui/TuringMachineSyntaxHighlighter.cpp
         src/ui/TapeVisualizationView.cpp
 
-        # UI - State & Transition Management
-        src/ui/StateDialog.cpp
-        src/ui/StatesListWidget.cpp
-        src/ui/TransitionDialog.cpp
-        src/ui/TransitionsListWidget.cpp
-
         # UI - Tape & Properties
         src/ui/TapeWidget.cpp
         src/ui/TapeControlWidget.cpp
-        src/ui/PropertiesEditorWidget.cpp
-        src/ui/PreferencesDialog.cpp
 )
 
 # Set header files
@@ -91,17 +83,9 @@ set(HEADERS
         src/ui/TuringMachineSyntaxHighlighter.h
         src/ui/TapeVisualizationView.h
 
-        # UI - State & Transition Management
-        src/ui/StateDialog.h
-        src/ui/StatesListWidget.h
-        src/ui/TransitionDialog.h
-        src/ui/TransitionsListWidget.h
-
         # UI - Tape & Properties
         src/ui/TapeWidget.h
         src/ui/TapeControlWidget.h
-        src/ui/PropertiesEditorWidget.h
-        src/ui/PreferencesDialog.h
 )
 
 # Include directories
