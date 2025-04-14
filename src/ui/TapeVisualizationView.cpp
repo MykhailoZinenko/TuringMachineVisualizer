@@ -16,6 +16,14 @@
 #include <QSlider>
 #include <QTimer>
 #include <QDebug>
+#include <QShortcut>
+#include <QSplitter>
+#include <QToolBar>
+
+#include "StyleKit.h"
+
+
+class QToolBar;
 
 TapeVisualizationView::TapeVisualizationView(TapeDocument* document, QWidget* parent)
     : QWidget(parent), m_document(document), m_simulationSpeed(500)
@@ -55,11 +63,44 @@ TapeVisualizationView::~TapeVisualizationView()
 void TapeVisualizationView::setupUI()
 {
     QVBoxLayout* mainLayout = new QVBoxLayout(this);
+    mainLayout->setContentsMargins(0, 0, 0, 0);
+    mainLayout->setSpacing(0);
 
-    // Tape visualization
+    // Create IDE-style toolbar
+    QToolBar* tapeToolbar = new QToolBar(this);
+    tapeToolbar->setIconSize(QSize(16, 16));
+    tapeToolbar->setStyleSheet(StyleKit::getToolbarStyle());
+
+    // Create toolbar actions
+    QAction* resetAction = new QAction(QIcon::fromTheme("edit-clear", QIcon(":/icons/reset.png")), tr("Reset"), this);
+    QAction* runAction = new QAction(QIcon::fromTheme("media-playback-start", QIcon(":/icons/run.png")), tr("Run"), this);
+    QAction* pauseAction = new QAction(QIcon::fromTheme("media-playback-pause", QIcon(":/icons/pause.png")), tr("Pause"), this);
+    QAction* stopAction = new QAction(QIcon::fromTheme("media-playback-stop", QIcon(":/icons/stop.png")), tr("Stop"), this);
+    QAction* stepBackAction = new QAction(QIcon::fromTheme("go-previous", QIcon(":/icons/step-back.png")), tr("Step Back"), this);
+    QAction* stepForwardAction = new QAction(QIcon::fromTheme("go-next", QIcon(":/icons/step-forward.png")), tr("Step Forward"), this);
+
+    // Add tooltips with keyboard shortcuts
+    resetAction->setToolTip(tr("Reset tape (Ctrl+R)"));
+    runAction->setToolTip(tr("Run simulation (F5)"));
+    pauseAction->setToolTip(tr("Pause simulation (F6)"));
+    stopAction->setToolTip(tr("Stop simulation (F7)"));
+    stepBackAction->setToolTip(tr("Step backward (Ctrl+Left)"));
+    stepForwardAction->setToolTip(tr("Step forward (Ctrl+Right)"));
+
+    // Add actions to toolbar
+    tapeToolbar->addAction(resetAction);
+    tapeToolbar->addSeparator();
+    tapeToolbar->addAction(runAction);
+    tapeToolbar->addAction(pauseAction);
+    tapeToolbar->addAction(stopAction);
+    tapeToolbar->addSeparator();
+    tapeToolbar->addAction(stepBackAction);
+    tapeToolbar->addAction(stepForwardAction);
+
+    // Tape visualization with IDE styling
     m_tapeWidget = new TapeWidget(this);
-    m_tapeWidget->setMinimumHeight(100);
-    mainLayout->addWidget(m_tapeWidget, 1);
+    m_tapeWidget->setMinimumHeight(150);
+    m_tapeWidget->setStyleSheet(StyleKit::getTapeWidgetStyle());
 
     // Connect tape widget signals
     connect(m_tapeWidget, &TapeWidget::tapeModified,
@@ -69,90 +110,128 @@ void TapeVisualizationView::setupUI()
     connect(m_tapeWidget, &TapeWidget::headPositionChanged,
             this, &TapeVisualizationView::onHeadPositionChanged);
 
-    // Create controls
-    QGroupBox* controlsGroup = new QGroupBox(tr("Tape Controls"), this);
-    QVBoxLayout* controlsLayout = new QVBoxLayout(controlsGroup);
+    // Create tape configuration panel
+    QWidget* configPanel = new QWidget(this);
+    QVBoxLayout* configLayout = new QVBoxLayout(configPanel);
+    configLayout->setContentsMargins(12, 12, 12, 12);
+    configLayout->setSpacing(8);
 
-    // Tape content controls
-    QGridLayout* tapeLayout = new QGridLayout();
+    // Tape content controls with IDE styling
+    QHBoxLayout* contentLayout = new QHBoxLayout();
+    contentLayout->setSpacing(8);
 
+    QLabel* contentLabel = new QLabel(tr("Content:"), this);
     m_contentEdit = new QLineEdit(this);
-    tapeLayout->addWidget(new QLabel(tr("Content:")), 0, 0);
-    tapeLayout->addWidget(m_contentEdit, 0, 1);
+    m_contentEdit->setStyleSheet(StyleKit::getInputStyle());
+    m_contentEdit->setPlaceholderText(tr("Enter initial tape content"));
 
+    contentLayout->addWidget(contentLabel);
+    contentLayout->addWidget(m_contentEdit);
+
+    QHBoxLayout* positionLayout = new QHBoxLayout();
+    positionLayout->setSpacing(8);
+
+    QLabel* positionLabel = new QLabel(tr("Head Position:"), this);
     m_headPositionSpin = new QSpinBox(this);
     m_headPositionSpin->setRange(0, 999999);
-    tapeLayout->addWidget(new QLabel(tr("Head Position:")), 1, 0);
-    tapeLayout->addWidget(m_headPositionSpin, 1, 1);
+    m_headPositionSpin->setStyleSheet(StyleKit::getInputStyle());
+
+    positionLayout->addWidget(positionLabel);
+    positionLayout->addWidget(m_headPositionSpin);
+
+    QHBoxLayout* buttonLayout = new QHBoxLayout();
+    buttonLayout->setSpacing(8);
 
     m_setButton = new QPushButton(tr("Set"), this);
-    m_resetButton = new QPushButton(tr("Reset"), this);
-    QHBoxLayout* tapeButtonLayout = new QHBoxLayout();
-    tapeButtonLayout->addWidget(m_setButton);
-    tapeButtonLayout->addWidget(m_resetButton);
-    tapeLayout->addLayout(tapeButtonLayout, 2, 0, 1, 2);
+    m_setButton->setStyleSheet(StyleKit::getButtonStyle(true));
 
-    controlsLayout->addLayout(tapeLayout);
+    buttonLayout->addWidget(m_setButton);
+    buttonLayout->addStretch();
 
-    // Simulation controls
-    QGroupBox* simulationGroup = new QGroupBox(tr("Simulation"), this);
-    QVBoxLayout* simulationLayout = new QVBoxLayout(simulationGroup);
+    configLayout->addLayout(contentLayout);
+    configLayout->addLayout(positionLayout);
+    configLayout->addLayout(buttonLayout);
+    configLayout->addStretch();
 
-    QHBoxLayout* runLayout = new QHBoxLayout();
-    m_runButton = new QPushButton(tr("Run"), this);
-    m_pauseButton = new QPushButton(tr("Pause"), this);
-    m_stopButton = new QPushButton(tr("Stop"), this);
-    m_stepForwardButton = new QPushButton(tr("Step >"), this);
-    m_stepBackwardButton = new QPushButton(tr("< Step"), this);
-
-    runLayout->addWidget(m_runButton);
-    runLayout->addWidget(m_pauseButton);
-    runLayout->addWidget(m_stopButton);
-    runLayout->addWidget(m_stepBackwardButton);
-    runLayout->addWidget(m_stepForwardButton);
-
-    simulationLayout->addLayout(runLayout);
-
-    // Speed slider
+    // Speed control
     QHBoxLayout* speedLayout = new QHBoxLayout();
-    speedLayout->addWidget(new QLabel(tr("Speed:")));
+    speedLayout->setSpacing(8);
 
+    m_speedLabel = new QLabel(tr("Speed: %1 ms").arg(m_simulationSpeed), this);
     m_speedSlider = new QSlider(Qt::Horizontal, this);
     m_speedSlider->setRange(50, 1000);
     m_speedSlider->setValue(m_simulationSpeed);
     m_speedSlider->setInvertedAppearance(true); // Faster to the right
+    m_speedSlider->setStyleSheet(StyleKit::getSliderStyle());
+
+    speedLayout->addWidget(m_speedLabel);
     speedLayout->addWidget(m_speedSlider, 1);
 
-    m_speedLabel = new QLabel(tr("%1 ms").arg(m_simulationSpeed), this);
-    speedLayout->addWidget(m_speedLabel);
+    configLayout->addLayout(speedLayout);
 
-    simulationLayout->addLayout(speedLayout);
-
-    controlsLayout->addWidget(simulationGroup);
-
-    // Status label
+    // Status label with IDE styling
     m_statusLabel = new QLabel(tr("Ready"), this);
-    m_statusLabel->setFrameStyle(QFrame::Panel | QFrame::Sunken);
+    m_statusLabel->setFrameStyle(QFrame::NoFrame);
     m_statusLabel->setMinimumHeight(24);
+    m_statusLabel->setStyleSheet(
+        "QLabel {"
+        "  background-color: #F5F5F5;"  // Very light gray
+        "  color: #333333;"             // Dark text
+        "  border-top: 1px solid #BDBDBD;"  // Light gray top border
+        "  padding: 4px 8px;"
+        "}"
+    );
 
-    // Add to main layout
-    mainLayout->addWidget(controlsGroup);
+    // Create a splitter for tape and config
+    QSplitter* splitter = new QSplitter(Qt::Vertical, this);
+    splitter->addWidget(m_tapeWidget);
+    splitter->addWidget(configPanel);
+    splitter->setStretchFactor(0, 2);  // Give tape more space
+    splitter->setStretchFactor(1, 1);
+
+    // Add everything to main layout
+    mainLayout->addWidget(tapeToolbar);
+    mainLayout->addWidget(splitter, 1);
     mainLayout->addWidget(m_statusLabel);
 
-    // Connect signals
+    // Store action buttons for use outside the layout
+    m_runButton = new QPushButton(this);
+    m_pauseButton = new QPushButton(this);
+    m_stopButton = new QPushButton(this);
+    m_stepForwardButton = new QPushButton(this);
+    m_stepBackwardButton = new QPushButton(this);
+    m_resetButton = new QPushButton(this);
+
+    // We're using actions instead of these buttons directly
+    m_runButton->hide();
+    m_pauseButton->hide();
+    m_stopButton->hide();
+    m_stepForwardButton->hide();
+    m_stepBackwardButton->hide();
+    m_resetButton->hide();
+
+    // Connect toolbar actions
+    connect(resetAction, &QAction::triggered, this, &TapeVisualizationView::resetTape);
+    connect(runAction, &QAction::triggered, this, &TapeVisualizationView::runSimulation);
+    connect(pauseAction, &QAction::triggered, this, &TapeVisualizationView::pauseSimulation);
+    connect(stopAction, &QAction::triggered, this, &TapeVisualizationView::stopSimulation);
+    connect(stepBackAction, &QAction::triggered, this, &TapeVisualizationView::stepBackward);
+    connect(stepForwardAction, &QAction::triggered, this, &TapeVisualizationView::stepForward);
+
+    // Connect other controls
     connect(m_setButton, &QPushButton::clicked, this, &TapeVisualizationView::setTapeContent);
-    connect(m_resetButton, &QPushButton::clicked, this, &TapeVisualizationView::resetTape);
-    connect(m_runButton, &QPushButton::clicked, this, &TapeVisualizationView::runSimulation);
-    connect(m_pauseButton, &QPushButton::clicked, this, &TapeVisualizationView::pauseSimulation);
-    connect(m_stopButton, &QPushButton::clicked, this, &TapeVisualizationView::stopSimulation);
-    connect(m_stepForwardButton, &QPushButton::clicked, this, &TapeVisualizationView::stepForward);
-    connect(m_stepBackwardButton, &QPushButton::clicked, this, &TapeVisualizationView::stepBackward);
     connect(m_speedSlider, &QSlider::valueChanged, this, &TapeVisualizationView::onSimulationSpeedChanged);
 
+    // Set up keyboard shortcuts
+    new QShortcut(QKeySequence("Ctrl+R"), this, SLOT(resetTape()));
+    new QShortcut(QKeySequence("F5"), this, SLOT(runSimulation()));
+    new QShortcut(QKeySequence("F6"), this, SLOT(pauseSimulation()));
+    new QShortcut(QKeySequence("F7"), this, SLOT(stopSimulation()));
+    new QShortcut(QKeySequence("Ctrl+Left"), this, SLOT(stepBackward()));
+    new QShortcut(QKeySequence("Ctrl+Right"), this, SLOT(stepForward()));
+
     // Initial state
-    m_pauseButton->setEnabled(false);
-    m_stopButton->setEnabled(false);
-    m_stepBackwardButton->setEnabled(false);
+    updateSimulationControls();
 }
 
 void TapeVisualizationView::updateFromDocument()
@@ -420,7 +499,7 @@ void TapeVisualizationView::stepBackward()
 void TapeVisualizationView::onSimulationSpeedChanged(int value)
 {
     m_simulationSpeed = value;
-    m_speedLabel->setText(tr("%1 ms").arg(value));
+    m_speedLabel->setText(tr("Speed: %1 ms").arg(value));
 
     if (m_simulationTimer->isActive()) {
         m_simulationTimer->setInterval(m_simulationSpeed);
@@ -545,10 +624,25 @@ void TapeVisualizationView::updateSimulationControls()
 void TapeVisualizationView::setStatusMessage(const QString& message, bool isError)
 {
     m_statusLabel->setText(message);
-    
+
     if (isError) {
-        m_statusLabel->setStyleSheet("color: red;");
+        m_statusLabel->setStyleSheet(
+            "QLabel {"
+            "  background-color: #FFF0F0;"  // Very light red
+            "  color: #C00000;"             // Dark red
+            "  border-top: 1px solid #FFCCCC;"  // Light red top border
+            "  padding: 4px 8px;"
+            "}"
+        );
     } else {
-        m_statusLabel->setStyleSheet("");
+        m_statusLabel->setStyleSheet(
+            "QLabel {"
+            "  background-color: #F5F5F5;"  // Very light gray
+            "  color: #333333;"             // Dark text
+            "  border-top: 1px solid #BDBDBD;"  // Light gray top border
+            "  padding: 4px 8px;"
+            "}"
+        );
     }
 }
+

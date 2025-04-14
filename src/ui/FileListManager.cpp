@@ -20,6 +20,8 @@
 #include <QIcon>
 #include <QDebug>
 
+#include "StyleKit.h"
+
 FileListManager::FileListManager(QWidget* parent)
     : QWidget(parent)
 {
@@ -82,29 +84,67 @@ QGroupBox* FileListManager::createCodeFilesAccordion()
     QGroupBox* groupBox = new QGroupBox(tr("Code Files"), this);
     groupBox->setCheckable(true);
     groupBox->setChecked(true);
-    
+    groupBox->setStyleSheet(StyleKit::getGroupBoxStyle());
+
     QVBoxLayout* layout = new QVBoxLayout(groupBox);
-    
-    // Create list widget
+    layout->setSpacing(8);
+    layout->setContentsMargins(10, 15, 10, 10); // Adjust for the title spacing
+
+    // Create list widget with modern styling
     m_codeFilesList = new QListWidget(groupBox);
     m_codeFilesList->setSelectionMode(QAbstractItemView::SingleSelection);
     m_codeFilesList->setDragDropMode(QAbstractItemView::DragDrop);
     m_codeFilesList->setAcceptDrops(true);
+    m_codeFilesList->setAlternatingRowColors(true);
+    m_codeFilesList->setStyleSheet(
+        "QListWidget {"
+        "  background-color: #FFFFFF;"
+        "  border: 1px solid #BDBDBD;"
+        "  border-radius: 3px;"
+        "  padding: 4px;"
+        "}"
+        "QListWidget::item {"
+        "  border-radius: 3px;"
+        "  padding: 6px 8px;"
+        "  margin: 3px 0px;"
+        "  background-color: #F8F9FA;"      // Light background for all items
+        "}"
+        "QListWidget::item:selected {"
+        "  background-color: #DBEAFE;"      // Distinct blue background for selected
+        "  color: #1E40AF;"                 // Dark blue text for selected
+        "  border: 1px solid #93C5FD;"      // Light blue border for selected
+        "  font-weight: bold;"              // Bold text for selected items
+        "}"
+        "QListWidget::item:hover:!selected {"
+        "  background-color: #F3F4F6;"      // Very light gray hover effect
+        "  border: 1px solid #E5E7EB;"      // Subtle border on hover
+        "}"
+        "QListWidget::item:alternate {"
+        "  background-color: #FAFAFA;"      // Extremely light gray for alternating rows
+        "}"
+    );
+
     layout->addWidget(m_codeFilesList);
-    
-    // Create buttons
+
+    // Create buttons with modern styling
     QHBoxLayout* buttonLayout = new QHBoxLayout();
-    
+    buttonLayout->setSpacing(8);
+
     m_newCodeButton = new QPushButton(tr("New"), groupBox);
     m_openCodeButton = new QPushButton(tr("Open"), groupBox);
     m_removeCodeButton = new QPushButton(tr("Remove"), groupBox);
-    
+
+    // Apply button styles
+    m_newCodeButton->setStyleSheet(StyleKit::getButtonStyle(true));  // Primary
+    m_openCodeButton->setStyleSheet(StyleKit::getButtonStyle(false)); // Secondary
+    m_removeCodeButton->setStyleSheet(StyleKit::getButtonStyle(false)); // Secondary
+
     buttonLayout->addWidget(m_newCodeButton);
     buttonLayout->addWidget(m_openCodeButton);
     buttonLayout->addWidget(m_removeCodeButton);
-    
+
     layout->addLayout(buttonLayout);
-    
+
     return groupBox;
 }
 
@@ -113,29 +153,67 @@ QGroupBox* FileListManager::createTapeFilesAccordion()
     QGroupBox* groupBox = new QGroupBox(tr("Tape Files"), this);
     groupBox->setCheckable(true);
     groupBox->setChecked(true);
-    
+    groupBox->setStyleSheet(StyleKit::getGroupBoxStyle());
+
     QVBoxLayout* layout = new QVBoxLayout(groupBox);
-    
-    // Create list widget
+    layout->setSpacing(8);
+    layout->setContentsMargins(10, 15, 10, 10); // Adjust for the title spacing
+
+    // Create list widget with modern styling
     m_tapeFilesList = new QListWidget(groupBox);
     m_tapeFilesList->setSelectionMode(QAbstractItemView::SingleSelection);
     m_tapeFilesList->setDragDropMode(QAbstractItemView::DragDrop);
     m_tapeFilesList->setAcceptDrops(true);
+    m_tapeFilesList->setAlternatingRowColors(true);
+    m_tapeFilesList->setStyleSheet(
+        "QListWidget {"
+        "  background-color: #FFFFFF;"
+        "  border: 1px solid #BDBDBD;"
+        "  border-radius: 3px;"
+        "  padding: 4px;"
+        "}"
+        "QListWidget::item {"
+        "  border-radius: 3px;"
+        "  padding: 6px 8px;"
+        "  margin: 3px 0px;"
+        "  background-color: #F8F9FA;"      // Light background for all items
+        "}"
+        "QListWidget::item:selected {"
+        "  background-color: #DCFCE7;"      // Light green background for selected
+        "  color: #166534;"                 // Dark green text for selected
+        "  border: 1px solid #86EFAC;"      // Light green border for selected
+        "  font-weight: bold;"              // Bold text for selected items
+        "}"
+        "QListWidget::item:hover:!selected {"
+        "  background-color: #F3F4F6;"      // Very light gray hover effect
+        "  border: 1px solid #E5E7EB;"      // Subtle border on hover
+        "}"
+        "QListWidget::item:alternate {"
+        "  background-color: #FAFAFA;"      // Extremely light gray for alternating rows
+        "}"
+    );
+
     layout->addWidget(m_tapeFilesList);
-    
-    // Create buttons
+
+    // Create buttons with modern styling
     QHBoxLayout* buttonLayout = new QHBoxLayout();
-    
+    buttonLayout->setSpacing(8);
+
     m_newTapeButton = new QPushButton(tr("New"), groupBox);
     m_openTapeButton = new QPushButton(tr("Open"), groupBox);
     m_removeTapeButton = new QPushButton(tr("Remove"), groupBox);
-    
+
+    // Apply button styles
+    m_newTapeButton->setStyleSheet(StyleKit::getButtonStyle(true));   // Primary
+    m_openTapeButton->setStyleSheet(StyleKit::getButtonStyle(false)); // Secondary
+    m_removeTapeButton->setStyleSheet(StyleKit::getButtonStyle(false)); // Secondary
+
     buttonLayout->addWidget(m_newTapeButton);
     buttonLayout->addWidget(m_openTapeButton);
     buttonLayout->addWidget(m_removeTapeButton);
-    
+
     layout->addLayout(buttonLayout);
-    
+
     return groupBox;
 }
 

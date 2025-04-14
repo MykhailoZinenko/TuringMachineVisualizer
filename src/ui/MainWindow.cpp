@@ -8,6 +8,7 @@
 
 #include <QAction>
 #include <QMenu>
+#include <QLabel>
 #include <QMenuBar>
 #include <QToolBar>
 #include <QStatusBar>
@@ -20,6 +21,8 @@
 #include <QApplication>
 #include <QDebug>
 #include <QTextEdit>
+
+#include "StyleKit.h"
 
 class QTextEdit;
 
@@ -57,46 +60,55 @@ void MainWindow::createActions()
     m_newCodeAction = new QAction(tr("&New Code File"), this);
     m_newCodeAction->setShortcuts(QKeySequence::New);
     m_newCodeAction->setStatusTip(tr("Create a new Turing machine code file"));
+    m_newCodeAction->setIcon(QIcon::fromTheme("document-new"));
     connect(m_newCodeAction, &QAction::triggered, this, &MainWindow::newCodeFile);
 
     m_newTapeAction = new QAction(tr("New &Tape File"), this);
     m_newTapeAction->setStatusTip(tr("Create a new tape file"));
+    m_newTapeAction->setIcon(QIcon::fromTheme("document-new"));
     connect(m_newTapeAction, &QAction::triggered, this, &MainWindow::newTapeFile);
 
     m_openAction = new QAction(tr("&Open..."), this);
     m_openAction->setShortcuts(QKeySequence::Open);
     m_openAction->setStatusTip(tr("Open an existing file"));
+    m_openAction->setIcon(QIcon::fromTheme("document-open"));
     connect(m_openAction, &QAction::triggered, this, &MainWindow::openFile);
 
     m_saveAction = new QAction(tr("&Save"), this);
     m_saveAction->setShortcuts(QKeySequence::Save);
     m_saveAction->setStatusTip(tr("Save the current file"));
+    m_saveAction->setIcon(QIcon::fromTheme("document-save"));
     connect(m_saveAction, &QAction::triggered, this, &MainWindow::saveFile);
 
     m_saveAsAction = new QAction(tr("Save &As..."), this);
     m_saveAsAction->setShortcuts(QKeySequence::SaveAs);
     m_saveAsAction->setStatusTip(tr("Save the current file with a new name"));
+    m_saveAsAction->setIcon(QIcon::fromTheme("document-save-as"));
     connect(m_saveAsAction, &QAction::triggered, this, &MainWindow::saveFileAs);
 
     m_exitAction = new QAction(tr("E&xit"), this);
     m_exitAction->setShortcuts(QKeySequence::Quit);
     m_exitAction->setStatusTip(tr("Exit the application"));
+    m_exitAction->setIcon(QIcon::fromTheme("application-exit"));
     connect(m_exitAction, &QAction::triggered, this, &MainWindow::exit);
 
     // Edit menu actions
     m_cutAction = new QAction(tr("Cu&t"), this);
     m_cutAction->setShortcuts(QKeySequence::Cut);
     m_cutAction->setStatusTip(tr("Cut the selection to the clipboard"));
+    m_cutAction->setIcon(QIcon::fromTheme("edit-cut"));
     connect(m_cutAction, &QAction::triggered, this, &MainWindow::cut);
 
     m_copyAction = new QAction(tr("&Copy"), this);
     m_copyAction->setShortcuts(QKeySequence::Copy);
     m_copyAction->setStatusTip(tr("Copy the selection to the clipboard"));
+    m_copyAction->setIcon(QIcon::fromTheme("edit-copy"));
     connect(m_copyAction, &QAction::triggered, this, &MainWindow::copy);
 
     m_pasteAction = new QAction(tr("&Paste"), this);
     m_pasteAction->setShortcuts(QKeySequence::Paste);
     m_pasteAction->setStatusTip(tr("Paste from the clipboard"));
+    m_pasteAction->setIcon(QIcon::fromTheme("edit-paste"));
     connect(m_pasteAction, &QAction::triggered, this, &MainWindow::paste);
 
     // View menu actions
@@ -109,6 +121,7 @@ void MainWindow::createActions()
     // Help menu actions
     m_aboutAction = new QAction(tr("&About"), this);
     m_aboutAction->setStatusTip(tr("Show the application's About box"));
+    m_aboutAction->setIcon(QIcon::fromTheme("help-about"));
     connect(m_aboutAction, &QAction::triggered, this, &MainWindow::about);
 }
 
@@ -144,6 +157,8 @@ void MainWindow::createToolbars()
 {
     // File toolbar
     m_fileToolBar = addToolBar(tr("File"));
+    m_fileToolBar->setMovable(true);
+    m_fileToolBar->setIconSize(QSize(22, 22));
     m_fileToolBar->addAction(m_newCodeAction);
     m_fileToolBar->addAction(m_newTapeAction);
     m_fileToolBar->addAction(m_openAction);
@@ -151,6 +166,8 @@ void MainWindow::createToolbars()
 
     // Edit toolbar
     m_editToolBar = addToolBar(tr("Edit"));
+    m_editToolBar->setMovable(true);
+    m_editToolBar->setIconSize(QSize(22, 22));
     m_editToolBar->addAction(m_cutAction);
     m_editToolBar->addAction(m_copyAction);
     m_editToolBar->addAction(m_pasteAction);
@@ -159,6 +176,12 @@ void MainWindow::createToolbars()
 void MainWindow::createStatusBar()
 {
     statusBar()->showMessage(tr("Ready"));
+
+    // Add a permanent status message for the application version
+    QLabel* versionLabel = new QLabel(tr("Version 1.0"), this);
+    versionLabel->setFrameStyle(QFrame::NoFrame);
+    versionLabel->setStyleSheet("color: #64748B; padding-right: 8px;"); // Subtle gray
+    statusBar()->addPermanentWidget(versionLabel);
 }
 
 void MainWindow::createDockWidgets()
@@ -166,6 +189,7 @@ void MainWindow::createDockWidgets()
     // Create file list dock widget
     m_fileListDock = new QDockWidget(tr("File List"), this);
     m_fileListDock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
+    m_fileListDock->setStyleSheet(StyleKit::getDockStyle());
 
     m_fileListManager = new FileListManager(m_fileListDock);
     m_fileListDock->setWidget(m_fileListManager);
@@ -188,9 +212,24 @@ void MainWindow::createCentralWidget()
     // Create horizontal splitter
     m_splitter = new QSplitter(Qt::Horizontal, this);
 
+    // Add some style to the splitter
+    m_splitter->setHandleWidth(1);
+    m_splitter->setStyleSheet(
+        "QSplitter::handle {"
+        "  background-color: #CBD5E1;"  // Light gray
+        "}"
+        "QSplitter::handle:hover {"
+        "  background-color: #3B82F6;"  // Blue when hovered
+        "}"
+    );
+
     // Create tab managers
     m_codeTabManager = new CodeTabManager(m_splitter);
     m_tapeTabManager = new TapeTabManager(m_splitter);
+
+    // Apply modern styles to tab managers
+    m_codeTabManager->setStyleSheet(StyleKit::getTabStyle());
+    m_tapeTabManager->setStyleSheet(StyleKit::getTabStyle());
 
     // Add to splitter
     m_splitter->addWidget(m_codeTabManager);

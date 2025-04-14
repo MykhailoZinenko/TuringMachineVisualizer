@@ -3,6 +3,7 @@
 #include "../core/SessionManager.h"
 
 #include <QPainter>
+#include <QPainterPath>
 #include <QMouseEvent>
 #include <QWheelEvent>
 #include <QResizeEvent>
@@ -372,26 +373,53 @@ void TapeWidget::drawCell(QPainter &painter, int cellIndex, const QRect &rect, c
 {
     if (!m_tape) return;
 
-    // Fill cell background
-    if (cellIndex == m_tape->getHeadPosition()) {
-        painter.fillRect(rect, QColor(255, 235, 185)); // Highlight current position
+    bool isCurrentCell = (cellIndex == m_tape->getHeadPosition());
+
+    // Cell background and shadow
+    QColor backgroundColor;
+
+    if (isCurrentCell) {
+        // Gradient for current cell
+        QLinearGradient gradient(rect.topLeft(), rect.bottomRight());
+        gradient.setColorAt(0, QColor(219, 234, 254));  // Light blue
+        gradient.setColorAt(1, QColor(191, 219, 254));  // Slightly darker blue
+        painter.setBrush(gradient);
     } else {
-        painter.fillRect(rect, QColor(255, 255, 255));
+        backgroundColor = QColor(255, 255, 255);  // White for normal cells
+        painter.setBrush(backgroundColor);
     }
 
-    // Draw cell border
-    painter.setPen(QPen(QColor(180, 180, 180), 1));
-    painter.drawRect(rect);
+    // Draw cell with rounded corners
+    painter.setPen(Qt::NoPen);
+    painter.drawRoundedRect(rect.adjusted(2, 2, -2, -2), 4, 4);
 
-    // Draw the symbols
+    // Draw border with subtle shadow effect
+    QPen borderPen;
+    if (isCurrentCell) {
+        borderPen = QPen(QColor(59, 130, 246), 2);  // Blue border for current cell
+    } else {
+        borderPen = QPen(QColor(203, 213, 225), 1);  // Light gray for other cells
+    }
+    painter.setPen(borderPen);
+    painter.drawRoundedRect(rect.adjusted(2, 2, -2, -2), 4, 4);
+
+    // Draw the symbols with nice typography
     if (!symbols.empty() && symbols != m_tape->getBlankSymbolAsString()) {
-        painter.setPen(Qt::black);
-        QFont font = painter.font();
-        font.setPointSize(14);
-        painter.setFont(font);
-
         QString symbolStr = QString::fromStdString(symbols);
 
+        // Set font
+        QFont font = painter.font();
+        font.setFamily("Inter");
+        font.setPointSize(14);
+        if (isCurrentCell) {
+            font.setBold(true);
+        }
+        painter.setFont(font);
+
+        // Set text color
+        painter.setPen(isCurrentCell ? QColor(30, 64, 175) : QColor(15, 23, 42));
+
+        // Draw centered text
         QFontMetrics fm(font);
         QRect textRect = fm.boundingRect(symbolStr);
         painter.drawText(
@@ -401,11 +429,12 @@ void TapeWidget::drawCell(QPainter &painter, int cellIndex, const QRect &rect, c
         );
     }
 
-    // Draw cell index at the bottom
+    // Draw cell index at the bottom with subtle styling
     QFont smallFont = painter.font();
+    smallFont.setFamily("Inter");
     smallFont.setPointSize(8);
     painter.setFont(smallFont);
-    painter.setPen(Qt::gray);
+    painter.setPen(QColor(148, 163, 184));  // Subtle gray
     QString indexStr = QString::number(cellIndex);
     QFontMetrics smallFm(smallFont);
     painter.drawText(
@@ -427,19 +456,45 @@ void TapeWidget::drawHead(QPainter &painter)
         offsetX = static_cast<int>(m_headAnimation * m_cellSize * m_headAnimOffset);
     }
 
-    QPolygon triangle;
+    // Draw a more refined head using a custom path
     int centerX = cellRect.left() + cellRect.width() / 2 + offsetX;
     int topY = 0;
 
-    triangle << QPoint(centerX, topY)
-             << QPoint(centerX - 10, topY - 15)
-             << QPoint(centerX + 10, topY - 15);
+    // Create a custom path for the head
+    QPainterPath path;
 
-    painter.setBrush(QColor(255, 50, 50));  // Red head
-    painter.setPen(Qt::black);
-    painter.drawPolygon(triangle);
+    // Triangle part
+    path.moveTo(centerX, topY);
+    path.lineTo(centerX - 10, topY - 14);
+    path.lineTo(centerX + 10, topY - 14);
+    path.closeSubpath();
 
-    // Draw a stem
+    // Create a gradient
+    QLinearGradient gradient(QPointF(centerX, topY - 14), QPointF(centerX, topY));
+    gradient.setColorAt(0, QColor(239, 68, 68));  // Lighter red at top
+    gradient.setColorAt(1, QColor(185, 28, 28));  // Darker red at bottom
+
+    // Draw the head with shadow
+    painter.setPen(Qt::NoPen);
+
+    // Draw shadow first
+    painter.save();
+    painter.translate(2, 2);
+    painter.setBrush(QColor(0, 0, 0, 50));  // Semi-transparent black
+    painter.drawPath(path);
+    painter.restore();
+
+    // Draw the actual head
+    painter.setBrush(gradient);
+    painter.drawPath(path);
+
+    // Add a subtle outline
+    painter.setPen(QPen(QColor(153, 27, 27), 1));
+    painter.drawPath(path);
+
+    // Draw a stem with rounded cap
+    QPen stemPen(QColor(153, 27, 27), 2, Qt::SolidLine, Qt::RoundCap);
+    painter.setPen(stemPen);
     painter.drawLine(centerX, topY, centerX, topY + 5);
 }
 

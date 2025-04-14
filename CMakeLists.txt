@@ -86,6 +86,9 @@ set(HEADERS
         # UI - Tape & Properties
         src/ui/TapeWidget.h
         src/ui/TapeControlWidget.h
+
+        # Styling
+        src/ui/StyleKit.h
 )
 
 # Include directories

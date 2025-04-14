@@ -7,10 +7,12 @@
 class CodeDocument;
 class QTextEdit;
 class QLabel;
+class QLineEdit;
+class QCheckBox;
 class QSyntaxHighlighter;
 
 /**
- * View for editing Turing machine code
+ * View for editing Turing machine code with IDE-like features
  */
 class CodeEditorView : public QWidget
 {
@@ -72,6 +74,41 @@ private slots:
      */
     void onMachineUpdated();
 
+    /**
+     * Undo last edit
+     */
+    void undo();
+
+    /**
+     * Redo last undone edit
+     */
+    void redo();
+
+    /**
+     * Show the find widget
+     */
+    void showFindWidget();
+
+    /**
+     * Hide the find widget
+     */
+    void hideFindWidget();
+
+    /**
+     * Handle search text changes
+     */
+    void searchTextChanged();
+
+    /**
+     * Find next occurrence
+     */
+    void findNext();
+
+    /**
+     * Find previous occurrence
+     */
+    void findPrevious();
+
 private:
     // Document being edited
     CodeDocument* m_document;
@@ -79,6 +116,12 @@ private:
     // UI components
     QTextEdit* m_codeEditor;
     QLabel* m_statusLabel;
+
+    // Search components
+    QWidget* m_findWidget;
+    QLineEdit* m_searchField;
+    QCheckBox* m_caseSensitiveCheckBox;
+    int m_lastSearchPos = -1;
 
     // Syntax highlighter
     QSyntaxHighlighter* m_syntaxHighlighter;
@@ -92,6 +135,11 @@ private:
     void setupUI();
 
     /**
+     * Set up the search widget
+     */
+    void setupSearchWidget();
+
+    /**
      * Create the syntax highlighter
      */
     void createSyntaxHighlighter();
@@ -102,4 +150,18 @@ private:
      * @param isError Whether the message is an error
      */
     void setStatusMessage(const QString& message, bool isError = false);
+
+    /**
+     * Count the occurrences of a search term
+     * @param text The text to find
+     * @return Number of occurrences
+     */
+    int countOccurrences(const QString& text);
+
+    /**
+     * Get the index of the current match
+     * @param text The text to find
+     * @return Index of current match (0-based)
+     */
+    int getCurrentMatchIndex(const QString& text);
 };
