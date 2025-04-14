@@ -7,7 +7,11 @@
 #include <QLabel>
 #include <QVBoxLayout>
 #include <QFont>
+#include <QTextCursor>
+#include <QScrollBar>
 #include <QDebug>
+
+#include "src/core/SessionManager.h"
 
 CodeEditorView::CodeEditorView(CodeDocument* document, QWidget* parent)
     : QWidget(parent), m_document(document), m_ignoreTextChanges(false)
@@ -75,10 +79,24 @@ void CodeEditorView::updateFromDocument()
         return;
     }
 
+    // Save cursor and scroll position
+    QTextCursor cursor = m_codeEditor->textCursor();
+    int position = cursor.position();
+    int scrollValue = m_codeEditor->verticalScrollBar()->value();
+
     // Update editor content
     m_ignoreTextChanges = true;
     m_codeEditor->setPlainText(QString::fromStdString(m_document->getCode()));
     m_ignoreTextChanges = false;
+
+    // Restore cursor position
+    if (position <= m_codeEditor->document()->characterCount()) {
+        cursor.setPosition(position);
+        m_codeEditor->setTextCursor(cursor);
+    }
+
+    // Restore scroll position
+    m_codeEditor->verticalScrollBar()->setValue(scrollValue);
 
     // Update status
     setStatusMessage(tr("Document loaded"));
@@ -109,7 +127,22 @@ void CodeEditorView::onDocumentSaved(const std::string& filePath)
         setStatusMessage(tr("Document saved"));
 
         // This is where the machine update happens, when file is saved
-        m_document->updateMachine();
+        bool success = m_document->updateMachine();
+
+        if (success) {
+            setStatusMessage(tr("Document saved and machine updated"));
+
+            // Make sure the active machine is properly updated in SessionManager
+            TuringMachine* machine = m_document->getMachine();
+            if (machine) {
+                auto& sessionManager = SessionManager::getInstance();
+                if (sessionManager.getActiveCodeDocument() == m_document) {
+                    sessionManager.activeMachineUpdated(machine);
+                }
+            }
+        } else {
+            setStatusMessage(tr("Document saved but machine update failed"), true);
+        }
 
         // Notify that the view has been saved
         emit viewSaved();
@@ -118,6 +151,10 @@ void CodeEditorView::onDocumentSaved(const std::string& filePath)
 
 void CodeEditorView::onDocumentContentChanged()
 {
+    // This slot is triggered when the document content changes from outside
+    // For example, when the file is reloaded from disk
+
+    // We call updateFromDocument which will preserve cursor position
     updateFromDocument();
 }
 

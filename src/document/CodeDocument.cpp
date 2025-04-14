@@ -6,6 +6,8 @@
 #include <QTextStream>
 #include <QDebug>
 
+#include "src/core/SessionManager.h"
+
 CodeDocument::CodeDocument(const std::string& name, const std::string& filePath)
     : Document(DocumentType::CODE, name, filePath)
 {
@@ -136,6 +138,17 @@ bool CodeDocument::updateMachine()
 
         // Notify that the machine was updated
         emit machineUpdated(m_machine.get());
+
+        // Update the SessionManager to notify all listeners
+        // This ensures that when code is saved, the active tape immediately gets the changes
+        auto& sessionManager = SessionManager::getInstance();
+        if (sessionManager.getActiveCodeDocument() == this) {
+            sessionManager.activeMachineUpdated(m_machine.get());
+        }
+
+        qDebug() << "Machine updated in CodeDocument, machine has"
+                 << m_machine->getAllStates().size() << "states and"
+                 << m_machine->getAllTransitions().size() << "transitions";
     }
 
     return success;

@@ -263,8 +263,21 @@ bool TapeDocument::saveToFile(const std::string& filePath)
 void TapeDocument::onActiveMachineUpdated(TuringMachine* machine)
 {
     if (machine) {
+        // Set this document's tape as the active tape in the machine
+        machine->setTape(m_tape.get());
+
+        // Reset the machine but keep the tape content
+        // Only reset if not in the middle of execution
+        if (machine->getStatus() == ExecutionStatus::READY) {
+            machine->reset(false);
+        }
+
         // Notify that the execution state may have changed due to a new machine
         emit executionStateChanged();
+
+        qDebug() << "Machine updated in TapeDocument, machine has"
+                 << machine->getAllStates().size() << "states and"
+                 << machine->getAllTransitions().size() << "transitions";
     }
 }
 

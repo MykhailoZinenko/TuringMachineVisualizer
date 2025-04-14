@@ -40,6 +40,12 @@ void SessionManager::setActiveTapeDocument(TapeDocument* document)
     if (m_activeTapeDocument != document) {
         m_activeTapeDocument = document;
         emit activeTapeDocumentChanged(document);
+
+        // If we have a tape document and an active machine, notify listeners
+        // This ensures code is applied when a new tape becomes active
+        if (m_activeTapeDocument && m_activeCodeDocument && m_activeCodeDocument->getMachine()) {
+            emit activeMachineUpdated(m_activeCodeDocument->getMachine());
+        }
     }
 }
 
