@@ -1,44 +1,47 @@
 #include "MainWindow.h"
-#include "DocumentTabManager.h"
-#include "../document/Document.h"
-#include "../project/Project.h"
-#include "../project/ProjectManager.h"
-#include <QApplication>
+#include "FileListManager.h"
+#include "CodeTabManager.h"
+#include "TapeTabManager.h"
+#include "../document/CodeDocument.h"
+#include "../document/TapeDocument.h"
+#include "../core/SessionManager.h"
+
+#include <QAction>
+#include <QMenu>
 #include <QMenuBar>
 #include <QToolBar>
 #include <QStatusBar>
-#include <QAction>
+#include <QSplitter>
+#include <QDockWidget>
+#include <QCloseEvent>
 #include <QFileDialog>
 #include <QMessageBox>
 #include <QSettings>
-#include <QCloseEvent>
-#include <QInputDialog>
-#include <QScreen>
+#include <QApplication>
+#include <QDebug>
+#include <QTextEdit>
 
-MainWindow::MainWindow(QWidget *parent)
-    : QMainWindow(parent), m_currentDocument(nullptr), m_currentProject(nullptr)
+class QTextEdit;
+
+MainWindow::MainWindow(QWidget* parent)
+    : QMainWindow(parent)
 {
-    // Create and set the central widget
-    m_tabManager = new DocumentTabManager(this);
-    setCentralWidget(m_tabManager);
-
-    // Setup UI components
+    // Create actions, menus, and toolbars
     createActions();
     createMenus();
     createToolbars();
     createStatusBar();
 
-    // Connect tab manager signals
-    connect(m_tabManager, &DocumentTabManager::documentTabChanged,
-            this, &MainWindow::onDocumentTabChanged);
-    connect(m_tabManager, &DocumentTabManager::documentTabClosed,
-            this, &MainWindow::onDocumentTabClosed);
+    // Create dock widgets and central widget
+    createDockWidgets();
+    createCentralWidget();
 
     // Read settings
     readSettings();
 
-    // Set window title
+    // Update UI
     updateWindowTitle();
+    updateActions();
 
     // Show ready status
     statusBar()->showMessage(tr("Ready"));
@@ -48,108 +51,109 @@ MainWindow::~MainWindow()
 {
 }
 
-void MainWindow::closeEvent(QCloseEvent *event)
-{
-    // Check if there are any unsaved projects
-    bool hasUnsavedProjects = false;
-
-    for (Project* project : ProjectManager::getInstance().getAllProjects()) {
-        if (project->isModified()) {
-            hasUnsavedProjects = true;
-            break;
-        }
-    }
-
-    if (hasUnsavedProjects) {
-        QMessageBox::StandardButton result = QMessageBox::question(
-            this,
-            tr("Unsaved Changes"),
-            tr("There are unsaved changes in one or more projects. Save before closing?"),
-            QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel
-        );
-
-        if (result == QMessageBox::Cancel) {
-            event->ignore();
-            return;
-        }
-
-        if (result == QMessageBox::Save) {
-            // Save all modified projects
-            for (Project* project : ProjectManager::getInstance().getAllProjects()) {
-                if (project->isModified()) {
-                    ProjectManager::getInstance().saveProject(project);
-                }
-            }
-        }
-    }
-
-    writeSettings();
-    event->accept();
-}
-
 void MainWindow::createActions()
 {
-    // New Project action
-    m_newProjectAction = new QAction(tr("&New Project"), this);
-    m_newProjectAction->setShortcuts(QKeySequence::New);
-    m_newProjectAction->setStatusTip(tr("Create a new Turing machine project"));
-    connect(m_newProjectAction, &QAction::triggered, this, &MainWindow::newProject);
+    // File menu actions
+    m_newCodeAction = new QAction(tr("&New Code File"), this);
+    m_newCodeAction->setShortcuts(QKeySequence::New);
+    m_newCodeAction->setStatusTip(tr("Create a new Turing machine code file"));
+    connect(m_newCodeAction, &QAction::triggered, this, &MainWindow::newCodeFile);
 
-    // Open Project action
-    m_openProjectAction = new QAction(tr("&Open Project..."), this);
-    m_openProjectAction->setShortcuts(QKeySequence::Open);
-    m_openProjectAction->setStatusTip(tr("Open an existing project"));
-    connect(m_openProjectAction, &QAction::triggered, this, &MainWindow::openProject);
+    m_newTapeAction = new QAction(tr("New &Tape File"), this);
+    m_newTapeAction->setStatusTip(tr("Create a new tape file"));
+    connect(m_newTapeAction, &QAction::triggered, this, &MainWindow::newTapeFile);
 
-    // Save Project action
-    m_saveProjectAction = new QAction(tr("&Save Project"), this);
-    m_saveProjectAction->setShortcuts(QKeySequence::Save);
-    m_saveProjectAction->setStatusTip(tr("Save the current project"));
-    m_saveProjectAction->setEnabled(false); // Disabled until a project is active
-    connect(m_saveProjectAction, &QAction::triggered, this, &MainWindow::saveProject);
+    m_openAction = new QAction(tr("&Open..."), this);
+    m_openAction->setShortcuts(QKeySequence::Open);
+    m_openAction->setStatusTip(tr("Open an existing file"));
+    connect(m_openAction, &QAction::triggered, this, &MainWindow::openFile);
 
-    // Save As action
-    m_saveAsProjectAction = new QAction(tr("Save Project &As..."), this);
-    m_saveAsProjectAction->setShortcuts(QKeySequence::SaveAs);
-    m_saveAsProjectAction->setStatusTip(tr("Save the current project with a new name"));
-    m_saveAsProjectAction->setEnabled(false); // Disabled until a project is active
-    connect(m_saveAsProjectAction, &QAction::triggered, this, &MainWindow::saveProjectAs);
+    m_saveAction = new QAction(tr("&Save"), this);
+    m_saveAction->setShortcuts(QKeySequence::Save);
+    m_saveAction->setStatusTip(tr("Save the current file"));
+    connect(m_saveAction, &QAction::triggered, this, &MainWindow::saveFile);
 
-    // Exit action
+    m_saveAsAction = new QAction(tr("Save &As..."), this);
+    m_saveAsAction->setShortcuts(QKeySequence::SaveAs);
+    m_saveAsAction->setStatusTip(tr("Save the current file with a new name"));
+    connect(m_saveAsAction, &QAction::triggered, this, &MainWindow::saveFileAs);
+
     m_exitAction = new QAction(tr("E&xit"), this);
     m_exitAction->setShortcuts(QKeySequence::Quit);
     m_exitAction->setStatusTip(tr("Exit the application"));
-    connect(m_exitAction, &QAction::triggered, this, &QWidget::close);
+    connect(m_exitAction, &QAction::triggered, this, &MainWindow::exit);
+
+    // Edit menu actions
+    m_cutAction = new QAction(tr("Cu&t"), this);
+    m_cutAction->setShortcuts(QKeySequence::Cut);
+    m_cutAction->setStatusTip(tr("Cut the selection to the clipboard"));
+    connect(m_cutAction, &QAction::triggered, this, &MainWindow::cut);
+
+    m_copyAction = new QAction(tr("&Copy"), this);
+    m_copyAction->setShortcuts(QKeySequence::Copy);
+    m_copyAction->setStatusTip(tr("Copy the selection to the clipboard"));
+    connect(m_copyAction, &QAction::triggered, this, &MainWindow::copy);
+
+    m_pasteAction = new QAction(tr("&Paste"), this);
+    m_pasteAction->setShortcuts(QKeySequence::Paste);
+    m_pasteAction->setStatusTip(tr("Paste from the clipboard"));
+    connect(m_pasteAction, &QAction::triggered, this, &MainWindow::paste);
+
+    // View menu actions
+    m_toggleFileListAction = new QAction(tr("&File List"), this);
+    m_toggleFileListAction->setCheckable(true);
+    m_toggleFileListAction->setChecked(true);
+    m_toggleFileListAction->setStatusTip(tr("Toggle file list visibility"));
+    connect(m_toggleFileListAction, &QAction::triggered, this, &MainWindow::toggleFileList);
+
+    // Help menu actions
+    m_aboutAction = new QAction(tr("&About"), this);
+    m_aboutAction->setStatusTip(tr("Show the application's About box"));
+    connect(m_aboutAction, &QAction::triggered, this, &MainWindow::about);
 }
 
 void MainWindow::createMenus()
 {
     // File menu
     m_fileMenu = menuBar()->addMenu(tr("&File"));
-    m_fileMenu->addAction(m_newProjectAction);
-    m_fileMenu->addAction(m_openProjectAction);
-    m_fileMenu->addAction(m_saveProjectAction);
-    m_fileMenu->addAction(m_saveAsProjectAction);
+    m_fileMenu->addAction(m_newCodeAction);
+    m_fileMenu->addAction(m_newTapeAction);
+    m_fileMenu->addAction(m_openAction);
+    m_fileMenu->addSeparator();
+    m_fileMenu->addAction(m_saveAction);
+    m_fileMenu->addAction(m_saveAsAction);
     m_fileMenu->addSeparator();
     m_fileMenu->addAction(m_exitAction);
 
-    // Edit menu (placeholder)
+    // Edit menu
     m_editMenu = menuBar()->addMenu(tr("&Edit"));
+    m_editMenu->addAction(m_cutAction);
+    m_editMenu->addAction(m_copyAction);
+    m_editMenu->addAction(m_pasteAction);
 
-    // View menu (placeholder)
+    // View menu
     m_viewMenu = menuBar()->addMenu(tr("&View"));
+    m_viewMenu->addAction(m_toggleFileListAction);
 
-    // Help menu (placeholder)
+    // Help menu
     m_helpMenu = menuBar()->addMenu(tr("&Help"));
+    m_helpMenu->addAction(m_aboutAction);
 }
 
 void MainWindow::createToolbars()
 {
     // File toolbar
     m_fileToolBar = addToolBar(tr("File"));
-    m_fileToolBar->addAction(m_newProjectAction);
-    m_fileToolBar->addAction(m_openProjectAction);
-    m_fileToolBar->addAction(m_saveProjectAction);
+    m_fileToolBar->addAction(m_newCodeAction);
+    m_fileToolBar->addAction(m_newTapeAction);
+    m_fileToolBar->addAction(m_openAction);
+    m_fileToolBar->addAction(m_saveAction);
+
+    // Edit toolbar
+    m_editToolBar = addToolBar(tr("Edit"));
+    m_editToolBar->addAction(m_cutAction);
+    m_editToolBar->addAction(m_copyAction);
+    m_editToolBar->addAction(m_pasteAction);
 }
 
 void MainWindow::createStatusBar()
@@ -157,194 +161,531 @@ void MainWindow::createStatusBar()
     statusBar()->showMessage(tr("Ready"));
 }
 
+void MainWindow::createDockWidgets()
+{
+    // Create file list dock widget
+    m_fileListDock = new QDockWidget(tr("File List"), this);
+    m_fileListDock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
+
+    m_fileListManager = new FileListManager(m_fileListDock);
+    m_fileListDock->setWidget(m_fileListManager);
+
+    addDockWidget(Qt::LeftDockWidgetArea, m_fileListDock);
+
+    // Connect file list signals
+    connect(m_fileListManager, &FileListManager::codeFileSelected,
+            this, &MainWindow::onCodeFileSelected);
+    connect(m_fileListManager, &FileListManager::tapeFileSelected,
+            this, &MainWindow::onTapeFileSelected);
+    connect(m_fileListManager, &FileListManager::codeDocumentCreated,
+            this, &MainWindow::onCodeDocumentCreated);
+    connect(m_fileListManager, &FileListManager::tapeDocumentCreated,
+            this, &MainWindow::onTapeDocumentCreated);
+}
+
+void MainWindow::createCentralWidget()
+{
+    // Create horizontal splitter
+    m_splitter = new QSplitter(Qt::Horizontal, this);
+
+    // Create tab managers
+    m_codeTabManager = new CodeTabManager(m_splitter);
+    m_tapeTabManager = new TapeTabManager(m_splitter);
+
+    // Add to splitter
+    m_splitter->addWidget(m_codeTabManager);
+    m_splitter->addWidget(m_tapeTabManager);
+
+    // Set as central widget
+    setCentralWidget(m_splitter);
+
+    // Set initial sizes
+    QList<int> sizes;
+    sizes << width() / 2 << width() / 2;
+    m_splitter->setSizes(sizes);
+
+    // Connect tab manager signals
+    connect(m_codeTabManager, &CodeTabManager::activeDocumentChanged,
+            this, &MainWindow::onActiveCodeDocumentChanged);
+    connect(m_tapeTabManager, &TapeTabManager::activeDocumentChanged,
+            this, &MainWindow::onActiveTapeDocumentChanged);
+    connect(m_codeTabManager, &CodeTabManager::documentClosed,
+            this, &MainWindow::onCodeDocumentClosed);
+    connect(m_tapeTabManager, &TapeTabManager::documentClosed,
+            this, &MainWindow::onTapeDocumentClosed);
+}
+
 void MainWindow::readSettings()
 {
-    QSettings settings("YourOrganization", "TuringMachineVisualizer");
+    QSettings settings;
 
     // Restore window geometry
-    const QByteArray geometry = settings.value("geometry", QByteArray()).toByteArray();
-    if (geometry.isEmpty()) {
-        // Default size
-        const QRect availableGeometry = QApplication::primaryScreen()->availableGeometry();
-        resize(availableGeometry.width() * 0.8, availableGeometry.height() * 0.7);
+    const QByteArray geometry = settings.value("MainWindow/geometry").toByteArray();
+    if (!geometry.isEmpty()) {
+        restoreGeometry(geometry);
+    } else {
+        // Default size and position
+        const QRect availableGeometry = QGuiApplication::primaryScreen()->availableGeometry();
+        resize(availableGeometry.width() * 3/4, availableGeometry.height() * 3/4);
         move((availableGeometry.width() - width()) / 2,
              (availableGeometry.height() - height()) / 2);
-    } else {
-        restoreGeometry(geometry);
     }
 
     // Restore window state
-    restoreState(settings.value("windowState").toByteArray());
+    const QByteArray state = settings.value("MainWindow/state").toByteArray();
+    if (!state.isEmpty()) {
+        restoreState(state);
+    }
+
+    // Restore file list visibility
+    bool fileListVisible = settings.value("MainWindow/fileListVisible", true).toBool();
+    m_fileListDock->setVisible(fileListVisible);
+    m_toggleFileListAction->setChecked(fileListVisible);
+
+    // Restore splitter sizes
+    QList<int> splitterSizes = settings.value("MainWindow/splitterSizes").value<QList<int>>();
+    if (!splitterSizes.isEmpty()) {
+        m_splitter->setSizes(splitterSizes);
+    }
 }
 
 void MainWindow::writeSettings()
 {
-    QSettings settings("YourOrganization", "TuringMachineVisualizer");
-    settings.setValue("geometry", saveGeometry());
-    settings.setValue("windowState", saveState());
+    QSettings settings;
+
+    // Save window geometry and state
+    settings.setValue("MainWindow/geometry", saveGeometry());
+    settings.setValue("MainWindow/state", saveState());
+
+    // Save file list visibility
+    settings.setValue("MainWindow/fileListVisible", m_fileListDock->isVisible());
+
+    // Save splitter sizes
+    settings.setValue("MainWindow/splitterSizes", QVariant::fromValue(m_splitter->sizes()));
 }
 
-void MainWindow::newProject()
+void MainWindow::closeEvent(QCloseEvent* event)
 {
-    // Get a project name
-    bool ok;
-    QString name = QInputDialog::getText(
-        this,
-        tr("New Turing Machine Project"),
-        tr("Enter a name for the new project:"),
-        QLineEdit::Normal,
-        tr("Untitled"),
-        &ok
-    );
-
-    if (!ok || name.isEmpty()) {
-        name = tr("Untitled");
-    }
-
-    // Create a new project
-    Project* project = ProjectManager::getInstance().createProject(name.toStdString());
-
-    // Open the project in tabs
-    if (project) {
-        m_tabManager->openProject(project);
-        statusBar()->showMessage(tr("Created new project: %1").arg(name), 2000);
-    }
-}
-
-void MainWindow::openProject()
-{
-    QString filePath = QFileDialog::getOpenFileName(
-        this,
-        tr("Open Project"),
-        QString(),
-        tr("Turing Machine Projects (*.tmproj);;All Files (*)")
-    );
-
-    if (filePath.isEmpty()) return;
-
-    // Check if already open
-    Project* existingProject = ProjectManager::getInstance().findProjectByPath(filePath.toStdString());
-    if (existingProject) {
-        // Just switch to the project's tabs
-        m_tabManager->openProject(existingProject);
-        statusBar()->showMessage(tr("Project already open: %1").arg(
-            QString::fromStdString(existingProject->getName())), 2000);
-        return;
-    }
-
-    // Try to open the project
-    Project* project = ProjectManager::getInstance().openProject(filePath.toStdString());
-
-    if (project) {
-        // Open the project's documents in tabs
-        m_tabManager->openProject(project);
-        statusBar()->showMessage(tr("Opened project: %1").arg(
-            QString::fromStdString(project->getName())), 2000);
+    // Check for unsaved changes
+    if (checkUnsavedChanges()) {
+        writeSettings();
+        event->accept();
     } else {
-        QMessageBox::warning(this, tr("Error"), tr("Failed to open the project"));
+        event->ignore();
     }
 }
 
-void MainWindow::saveProject()
+bool MainWindow::checkUnsavedChanges()
 {
-    if (!m_currentProject) return;
-
-    if (m_currentProject->getFilePath().empty()) {
-        saveProjectAs();
-        return;
-    }
-
-    if (ProjectManager::getInstance().saveProject(m_currentProject)) {
-        statusBar()->showMessage(tr("Project saved"), 2000);
-        updateWindowTitle();
-    } else {
-        QMessageBox::warning(
+    // Check code documents
+    CodeDocument* activeCodeDoc = m_codeTabManager->getActiveDocument();
+    if (activeCodeDoc && activeCodeDoc->isModified()) {
+        QMessageBox::StandardButton result = QMessageBox::question(
             this,
-            tr("Save Error"),
-            tr("Failed to save the project")
+            tr("Save Changes"),
+            tr("The document '%1' has unsaved changes. Save before closing?")
+                .arg(QString::fromStdString(activeCodeDoc->getName())),
+            QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel
         );
-    }
-}
 
-void MainWindow::saveProjectAs()
-{
-    if (!m_currentProject) return;
+        if (result == QMessageBox::Cancel) {
+            return false;
+        }
 
-    QString filePath = QFileDialog::getSaveFileName(
-        this,
-        tr("Save Project As"),
-        QString::fromStdString(m_currentProject->getName()),
-        tr("Turing Machine Projects (*.tmproj)")
-    );
-
-    if (filePath.isEmpty()) return;
-
-    // Add extension if missing
-    if (!filePath.endsWith(".tmproj")) {
-        filePath += ".tmproj";
+        if (result == QMessageBox::Save) {
+            if (!m_codeTabManager->saveCurrentDocument()) {
+                return false;
+            }
+        }
     }
 
-    if (ProjectManager::getInstance().saveProjectAs(m_currentProject, filePath.toStdString())) {
-        statusBar()->showMessage(tr("Project saved as %1").arg(filePath), 2000);
-        updateWindowTitle();
-    } else {
-        QMessageBox::warning(
+    // Check tape documents
+    TapeDocument* activeTapeDoc = m_tapeTabManager->getActiveDocument();
+    if (activeTapeDoc && activeTapeDoc->isModified()) {
+        QMessageBox::StandardButton result = QMessageBox::question(
             this,
-            tr("Save Error"),
-            tr("Failed to save the project as %1").arg(filePath)
+            tr("Save Changes"),
+            tr("The document '%1' has unsaved changes. Save before closing?")
+                .arg(QString::fromStdString(activeTapeDoc->getName())),
+            QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel
         );
-    }
-}
 
-void MainWindow::onDocumentTabChanged(Document* document)
-{
-    m_currentDocument = document;
+        if (result == QMessageBox::Cancel) {
+            return false;
+        }
 
-    // Update the current project
-    if (document) {
-        m_currentProject = document->getProject();
-    } else {
-        m_currentProject = nullptr;
+        if (result == QMessageBox::Save) {
+            if (!m_tapeTabManager->saveCurrentDocument()) {
+                return false;
+            }
+        }
     }
 
-    updateUIForDocument(document);
-}
-
-void MainWindow::onDocumentTabClosed(Document* document)
-{
-    // If we're closing the current document, update the UI
-    if (document == m_currentDocument) {
-        m_currentDocument = nullptr;
-        updateUIForDocument(nullptr);
-    }
+    return true;
 }
 
 void MainWindow::updateWindowTitle()
 {
-    if (m_currentProject) {
-        QString title = QString::fromStdString(m_currentProject->getName());
-        if (m_currentProject->isModified()) {
-            title += "*";
+    QString title = tr("Turing Machine Visualizer");
+
+    CodeDocument* codeDoc = m_codeTabManager->getActiveDocument();
+    TapeDocument* tapeDoc = m_tapeTabManager->getActiveDocument();
+
+    if (codeDoc) {
+        QString codeName = QString::fromStdString(codeDoc->getName());
+        if (codeDoc->isModified()) {
+            codeName += "*";
         }
-        setWindowTitle(title + " - Turing Machine Visualizer");
-    } else {
-        setWindowTitle("Turing Machine Visualizer");
+
+        title = codeName + " - " + title;
+    }
+
+    if (tapeDoc) {
+        QString tapeName = QString::fromStdString(tapeDoc->getName());
+        if (tapeDoc->isModified()) {
+            tapeName += "*";
+        }
+
+        statusBar()->showMessage(tr("Tape: %1").arg(tapeName));
+    }
+
+    setWindowTitle(title);
+}
+
+void MainWindow::updateActions()
+{
+    CodeDocument* codeDoc = m_codeTabManager->getActiveDocument();
+    TapeDocument* tapeDoc = m_tapeTabManager->getActiveDocument();
+
+    // File menu actions
+    m_saveAction->setEnabled(codeDoc != nullptr || tapeDoc != nullptr);
+    m_saveAsAction->setEnabled(codeDoc != nullptr || tapeDoc != nullptr);
+
+    // Edit menu actions
+    bool canEdit = (codeDoc != nullptr);
+    m_cutAction->setEnabled(canEdit);
+    m_copyAction->setEnabled(canEdit);
+    m_pasteAction->setEnabled(canEdit);
+}
+
+void MainWindow::newCodeFile()
+{
+    // Create a new code document
+    QString fileName = QFileDialog::getSaveFileName(
+        this,
+        tr("New Code File"),
+        QString(),
+        tr("Turing Machine Files (*.tm)")
+    );
+
+    if (fileName.isEmpty()) {
+        return;
+    }
+
+    // Ensure it has .tm extension
+    if (!fileName.toLower().endsWith(".tm")) {
+        fileName += ".tm";
+    }
+
+    // Create and open the document
+    CodeDocument* document = m_codeTabManager->createDocument(fileName.toStdString());
+    if (document) {
+        // Add to file list
+        m_fileListManager->addCodeFile(fileName);
+
+        // Update UI
+        updateWindowTitle();
+        updateActions();
+
+        statusBar()->showMessage(tr("Created new code file '%1'").arg(fileName), 2000);
     }
 }
 
-void MainWindow::updateUIForDocument(Document* document)
+void MainWindow::newTapeFile()
 {
-    updateWindowTitle();
+    // Create a new tape document
+    QString fileName = QFileDialog::getSaveFileName(
+        this,
+        tr("New Tape File"),
+        QString(),
+        tr("Tape Files (*.tmt)")
+    );
 
-    // Enable/disable actions based on having a document
-    m_saveProjectAction->setEnabled(m_currentProject != nullptr);
-    m_saveAsProjectAction->setEnabled(m_currentProject != nullptr);
-
-    // Update status bar
-    if (document) {
-        statusBar()->showMessage(tr("Document: %1")
-            .arg(QString::fromStdString(document->getName())));
-    } else {
-        statusBar()->showMessage(tr("No document selected"));
+    if (fileName.isEmpty()) {
+        return;
     }
+
+    // Ensure it has .tmt extension
+    if (!fileName.toLower().endsWith(".tmt")) {
+        fileName += ".tmt";
+    }
+
+    // Create and open the document
+    TapeDocument* document = m_tapeTabManager->createDocument(fileName.toStdString());
+    if (document) {
+        // Add to file list
+        m_fileListManager->addTapeFile(fileName);
+
+        // Update UI
+        updateWindowTitle();
+        updateActions();
+
+        statusBar()->showMessage(tr("Created new tape file '%1'").arg(fileName), 2000);
+    }
+}
+
+void MainWindow::openFile()
+{
+    QString fileName = QFileDialog::getOpenFileName(
+        this,
+        tr("Open File"),
+        QString(),
+        tr("Turing Machine Files (*.tm);;Tape Files (*.tmt);;All Files (*)")
+    );
+
+    if (fileName.isEmpty()) {
+        return;
+    }
+
+    if (fileName.toLower().endsWith(".tm")) {
+        onCodeFileSelected(fileName);
+    } else if (fileName.toLower().endsWith(".tmt")) {
+        onTapeFileSelected(fileName);
+    } else {
+        QMessageBox::warning(
+            this,
+            tr("Unknown File Type"),
+            tr("The file '%1' has an unknown file type.")
+                .arg(fileName)
+        );
+    }
+}
+
+void MainWindow::saveFile()
+{
+    // Determine which tab manager is active
+    QWidget* focusWidget = QApplication::focusWidget();
+    bool codeActive = false;
+
+    while (focusWidget) {
+        if (focusWidget == m_codeTabManager) {
+            codeActive = true;
+            break;
+        } else if (focusWidget == m_tapeTabManager) {
+            codeActive = false;
+            break;
+        }
+        focusWidget = focusWidget->parentWidget();
+    }
+
+    if (codeActive) {
+        if (m_codeTabManager->saveCurrentDocument()) {
+            statusBar()->showMessage(tr("File saved"), 2000);
+            updateWindowTitle();
+        }
+    } else {
+        if (m_tapeTabManager->saveCurrentDocument()) {
+            statusBar()->showMessage(tr("File saved"), 2000);
+            updateWindowTitle();
+        }
+    }
+}
+
+void MainWindow::saveFileAs()
+{
+    // Determine which tab manager is active
+    QWidget* focusWidget = QApplication::focusWidget();
+    bool codeActive = false;
+
+    while (focusWidget) {
+        if (focusWidget == m_codeTabManager) {
+            codeActive = true;
+            break;
+        } else if (focusWidget == m_tapeTabManager) {
+            codeActive = false;
+            break;
+        }
+        focusWidget = focusWidget->parentWidget();
+    }
+
+    if (codeActive) {
+        if (m_codeTabManager->saveCurrentDocumentAs()) {
+            CodeDocument* document = m_codeTabManager->getActiveDocument();
+            if (document) {
+                m_fileListManager->addCodeFile(QString::fromStdString(document->getFilePath()));
+                statusBar()->showMessage(tr("File saved"), 2000);
+                updateWindowTitle();
+            }
+        }
+    } else {
+        if (m_tapeTabManager->saveCurrentDocumentAs()) {
+            TapeDocument* document = m_tapeTabManager->getActiveDocument();
+            if (document) {
+                m_fileListManager->addTapeFile(QString::fromStdString(document->getFilePath()));
+                statusBar()->showMessage(tr("File saved"), 2000);
+                updateWindowTitle();
+            }
+        }
+    }
+}
+
+void MainWindow::exit()
+{
+    close();
+}
+
+void MainWindow::cut()
+{
+    // Pass to active code editor
+    QWidget* focusWidget = QApplication::focusWidget();
+    if (QTextEdit* textEdit = qobject_cast<QTextEdit*>(focusWidget)) {
+        textEdit->cut();
+    }
+}
+
+void MainWindow::copy()
+{
+    // Pass to active code editor
+    QWidget* focusWidget = QApplication::focusWidget();
+    if (QTextEdit* textEdit = qobject_cast<QTextEdit*>(focusWidget)) {
+        textEdit->copy();
+    }
+}
+
+void MainWindow::paste()
+{
+    // Pass to active code editor
+    QWidget* focusWidget = QApplication::focusWidget();
+    if (QTextEdit* textEdit = qobject_cast<QTextEdit*>(focusWidget)) {
+        textEdit->paste();
+    }
+}
+
+void MainWindow::toggleFileList()
+{
+    m_fileListDock->setVisible(!m_fileListDock->isVisible());
+    m_toggleFileListAction->setChecked(m_fileListDock->isVisible());
+}
+
+void MainWindow::about()
+{
+    QMessageBox::about(
+        this,
+        tr("About Turing Machine Visualizer"),
+        tr("The <b>Turing Machine Visualizer</b> allows you to create, edit, "
+           "and visualize Turing machines.<br><br>"
+           "Version 1.0")
+    );
+}
+
+void MainWindow::onCodeFileSelected(const QString& path)
+{
+    // Check if already open
+    CodeDocument* document = m_codeTabManager->findDocumentByPath(path.toStdString());
+    if (document) {
+        // Just select it
+        m_codeTabManager->openDocument(document);
+    } else {
+        // Create new document
+        document = m_codeTabManager->createDocument(path.toStdString());
+        if (document) {
+            // Add to file list
+            m_fileListManager->addCodeFile(path);
+        }
+    }
+
+    // Update UI
+    updateWindowTitle();
+    updateActions();
+}
+
+void MainWindow::onTapeFileSelected(const QString& path)
+{
+    // Check if already open
+    TapeDocument* document = m_tapeTabManager->findDocumentByPath(path.toStdString());
+    if (document) {
+        // Just select it
+        m_tapeTabManager->openDocument(document);
+    } else {
+        // Create new document
+        document = m_tapeTabManager->createDocument(path.toStdString());
+        if (document) {
+            // Add to file list
+            m_fileListManager->addTapeFile(path);
+        }
+    }
+
+    // Update UI
+    updateWindowTitle();
+    updateActions();
+}
+
+void MainWindow::onCodeDocumentCreated(CodeDocument* document)
+{
+    if (document) {
+        m_codeTabManager->openDocument(document);
+
+        // Update UI
+        updateWindowTitle();
+        updateActions();
+    }
+}
+
+void MainWindow::onTapeDocumentCreated(TapeDocument* document)
+{
+    if (document) {
+        m_tapeTabManager->openDocument(document);
+
+        // Update UI
+        updateWindowTitle();
+        updateActions();
+    }
+}
+
+void MainWindow::onCodeDocumentClosed(CodeDocument* document)
+{
+    Q_UNUSED(document);
+
+    // Update UI
+    updateWindowTitle();
+    updateActions();
+}
+
+void MainWindow::onTapeDocumentClosed(TapeDocument* document)
+{
+    Q_UNUSED(document);
+
+    // Update UI
+    updateWindowTitle();
+    updateActions();
+}
+
+void MainWindow::onActiveCodeDocumentChanged(CodeDocument* document)
+{
+    // Update SessionManager
+    SessionManager::getInstance().setActiveCodeDocument(document);
+
+    // Update file list selection
+    if (document) {
+        m_fileListManager->setActiveDocument(document);
+    }
+
+    // Update UI
+    updateWindowTitle();
+    updateActions();
+}
+
+void MainWindow::onActiveTapeDocumentChanged(TapeDocument* document)
+{
+    // Update SessionManager
+    SessionManager::getInstance().setActiveTapeDocument(document);
+
+    // Update file list selection
+    if (document) {
+        m_fileListManager->setActiveDocument(document);
+    }
+
+    // Update UI
+    updateWindowTitle();
+    updateActions();
 }

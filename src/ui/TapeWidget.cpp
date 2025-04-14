@@ -1,6 +1,7 @@
 #include "TapeWidget.h"
+#include "../model/Tape.h"
+#include "../core/SessionManager.h"
 
-// Qt includes
 #include <QPainter>
 #include <QMouseEvent>
 #include <QWheelEvent>
@@ -9,25 +10,26 @@
 #include <QPropertyAnimation>
 #include <QInputDialog>
 #include <QMenu>
+#include <QAction>
 #include <QDebug>
-
-// Project includes
-#include "../model/Tape.h"
 
 TapeWidget::TapeWidget(QWidget *parent)
     : QWidget(parent), m_tape(nullptr), m_visibleCells(15), m_cellSize(40),
       m_leftmostCell(0), m_headAnimOffset(0), m_headAnimation(0.0),
       m_interactiveMode(true)
 {
+    // Set widget properties
     setMinimumHeight(100);
     setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
     setFocusPolicy(Qt::StrongFocus);
     setContextMenuPolicy(Qt::DefaultContextMenu);
 
+    // Create update timer
     m_updateTimer = new QTimer(this);
     connect(m_updateTimer, &QTimer::timeout, this, &TapeWidget::updateTapeDisplay);
     m_updateTimer->start(100);
 
+    // Create head animation object
     m_headAnimationObj = new QPropertyAnimation(this, "headAnimation");
     m_headAnimationObj->setDuration(300);
     m_headAnimationObj->setEasingCurve(QEasingCurve::OutCubic);
@@ -35,28 +37,30 @@ TapeWidget::TapeWidget(QWidget *parent)
 
 TapeWidget::~TapeWidget()
 {
+    // Stop the timer to prevent access to potentially deleted objects
     m_updateTimer->stop();
+
+    // Delete animation object
     delete m_headAnimationObj;
 }
 
-// Core functionality methods
 void TapeWidget::setTape(Tape* tape)
 {
     m_tape = tape;
-    centerHeadPosition();
+    if (m_tape) {
+        centerHeadPosition();
+    }
     updateTapeDisplay();
 }
 
 void TapeWidget::updateTapeDisplay()
 {
-    if (m_tape) {
-        update();
-    }
+    update();
 }
 
 void TapeWidget::animateHeadMovement(bool moveRight)
 {
-    if (!m_headAnimationObj->state() == QPropertyAnimation::Running) {
+    if (m_headAnimationObj->state() != QPropertyAnimation::Running) {
         m_headAnimation = 0.0;
         m_headAnimationObj->setStartValue(0.0);
         m_headAnimationObj->setEndValue(1.0);
@@ -77,13 +81,11 @@ void TapeWidget::setHeadAnimation(qreal value)
     }
 }
 
-// Interactive mode methods
 void TapeWidget::setInteractiveMode(bool enabled)
 {
     m_interactiveMode = enabled;
 }
 
-// Zoom control methods
 void TapeWidget::zoomIn()
 {
     if (m_cellSize < 100) {
@@ -116,33 +118,38 @@ void TapeWidget::onStepExecuted()
     updateTapeDisplay();
 }
 
-// Qt event handlers
 void TapeWidget::paintEvent(QPaintEvent *event)
 {
-    if (!m_tape) return;
+    Q_UNUSED(event);
 
     QPainter painter(this);
     painter.setRenderHint(QPainter::Antialiasing);
 
+    // Draw background
     painter.fillRect(rect(), QColor(245, 245, 245));
+
+    // Draw grid
     drawGrid(painter);
 
+    // If no tape, just return
+    if (!m_tape) return;
+
+    // Calculate visible portion
     int start = m_leftmostCell;
     int end = start + m_visibleCells;
 
     auto visibleCells = m_tape->getVisiblePortion(start, end - start);
 
+    // Draw cells
     for (const auto& cellPair : visibleCells) {
         int cellIndex = cellPair.first;
         const std::string& symbols = cellPair.second;
 
         QRect cellRect = getCellRect(cellIndex);
-
-        if (cellRect.intersects(event->rect())) {
-            drawCell(painter, cellIndex, cellRect, symbols);
-        }
+        drawCell(painter, cellIndex, cellRect, symbols);
     }
 
+    // Draw head
     drawHead(painter);
 }
 
@@ -224,12 +231,14 @@ void TapeWidget::mouseMoveEvent(QMouseEvent *event)
 void TapeWidget::wheelEvent(QWheelEvent *event)
 {
     if (event->modifiers() & Qt::ControlModifier) {
+        // Zoom with Ctrl+wheel
         if (event->angleDelta().y() > 0) {
             zoomIn();
         } else {
             zoomOut();
         }
     } else {
+        // Scroll with wheel
         if (event->angleDelta().y() > 0) {
             m_leftmostCell--;
         } else {
@@ -258,7 +267,6 @@ void TapeWidget::resizeEvent(QResizeEvent *event)
     updateCellSize();
 }
 
-// Helper methods
 int TapeWidget::xToCell(int x) const
 {
     return m_leftmostCell + x / m_cellSize;
@@ -360,15 +368,18 @@ void TapeWidget::moveHeadToCell(int cellIndex)
     }
 }
 
-// Drawing methods
 void TapeWidget::drawCell(QPainter &painter, int cellIndex, const QRect &rect, const std::string& symbols)
 {
+    if (!m_tape) return;
+
+    // Fill cell background
     if (cellIndex == m_tape->getHeadPosition()) {
-        painter.fillRect(rect, QColor(255, 235, 185));
+        painter.fillRect(rect, QColor(255, 235, 185)); // Highlight current position
     } else {
         painter.fillRect(rect, QColor(255, 255, 255));
     }
 
+    // Draw cell border
     painter.setPen(QPen(QColor(180, 180, 180), 1));
     painter.drawRect(rect);
 
@@ -418,19 +429,23 @@ void TapeWidget::drawHead(QPainter &painter)
 
     QPolygon triangle;
     int centerX = cellRect.left() + cellRect.width() / 2 + offsetX;
-    triangle << QPoint(centerX, 0)
-             << QPoint(centerX - 10, -15)
-             << QPoint(centerX + 10, -15);
+    int topY = 0;
 
-    painter.setBrush(QColor(255, 50, 50));
+    triangle << QPoint(centerX, topY)
+             << QPoint(centerX - 10, topY - 15)
+             << QPoint(centerX + 10, topY - 15);
+
+    painter.setBrush(QColor(255, 50, 50));  // Red head
     painter.setPen(Qt::black);
     painter.drawPolygon(triangle);
 
-    painter.drawLine(centerX, 0, centerX, 5);
+    // Draw a stem
+    painter.drawLine(centerX, topY, centerX, topY + 5);
 }
 
 void TapeWidget::drawGrid(QPainter &painter)
 {
+    // Draw dotted grid lines
     painter.setPen(QPen(QColor(220, 220, 220), 1, Qt::DotLine));
 
     for (int i = 0; i <= m_visibleCells; ++i) {
@@ -438,6 +453,7 @@ void TapeWidget::drawGrid(QPainter &painter)
         painter.drawLine(x, 0, x, height());
     }
 
+    // Draw center horizontal line
     painter.setPen(QPen(QColor(180, 180, 180), 1));
     painter.drawLine(0, height() / 2, width(), height() / 2);
 }

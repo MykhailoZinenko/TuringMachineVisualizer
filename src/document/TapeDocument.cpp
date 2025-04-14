@@ -1,15 +1,23 @@
 #include "TapeDocument.h"
-#include "../project/Project.h"
-#include "../model/TuringMachine.h"
 #include "../model/Tape.h"
+#include "../model/TuringMachine.h"
+#include "../core/SessionManager.h"
+#include <QFile>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonArray>
 #include <QDebug>
 
-TapeDocument::TapeDocument(Project* project, const std::string& id, const std::string& name)
-    : Document(project, DocumentType::TAPE, name),
+TapeDocument::TapeDocument(const std::string& name, const std::string& filePath)
+    : Document(DocumentType::TAPE, name, filePath),
       m_initialHeadPosition(0)
 {
-    // Create a new tape
+    // Create a new empty tape
     m_tape = std::make_unique<Tape>();
+
+    // Connect to SessionManager for machine updates
+    connect(&SessionManager::getInstance(), &SessionManager::activeMachineUpdated,
+            this, &TapeDocument::onActiveMachineUpdated);
 }
 
 TapeDocument::~TapeDocument()
@@ -21,12 +29,7 @@ void TapeDocument::setInitialContent(const std::string& content)
     m_initialContent = content;
     m_tape->setInitialContent(content);
 
-    qDebug() << "Setting tape content to:" << &m_tape << " " << content;
-
-    if (getProject()) {
-        getProject()->setModified(true);
-    }
-
+    setModified(true);
     emit tapeContentChanged();
 }
 
@@ -35,26 +38,20 @@ void TapeDocument::setInitialHeadPosition(int position)
     m_initialHeadPosition = position;
     m_tape->setHeadPosition(position);
 
-    if (getProject()) {
-        getProject()->setModified(true);
-    }
-
+    setModified(true);
     emit tapeContentChanged();
 }
 
 bool TapeDocument::step(bool isManualStep)
 {
-    if (!getProject() || !getProject()->getMachine()) {
-        qWarning() << "No machine available for step";
+    TuringMachine* machine = getActiveMachine();
+    if (!machine) {
+        qWarning() << "No active machine available for step";
         return false;
     }
 
     // Set the active tape in the machine
-    TuringMachine* machine = getProject()->getMachine();
-    Tape* tape = m_tape.get();
-
-    // Create a temporary link to our tape
-    machine->setTape(tape);
+    machine->setTape(m_tape.get());
 
     // Execute a step
     bool success = machine->step();
@@ -70,11 +67,10 @@ bool TapeDocument::step(bool isManualStep)
 
 void TapeDocument::reset()
 {
-    if (!getProject() || !getProject()->getMachine()) {
+    TuringMachine* machine = getActiveMachine();
+    if (!machine) {
         return;
     }
-
-    TuringMachine* machine = getProject()->getMachine();
 
     // Set the active tape in the machine
     machine->setTape(m_tape.get());
@@ -83,15 +79,15 @@ void TapeDocument::reset()
     machine->reset(true);
 
     emit executionStateChanged();
+    emit tapeContentChanged();
 }
 
 void TapeDocument::run()
 {
-    if (!getProject() || !getProject()->getMachine()) {
+    TuringMachine* machine = getActiveMachine();
+    if (!machine) {
         return;
     }
-
-    TuringMachine* machine = getProject()->getMachine();
 
     // Set the active tape in the machine
     machine->setTape(m_tape.get());
@@ -104,11 +100,10 @@ void TapeDocument::run()
 
 void TapeDocument::pause()
 {
-    if (!getProject() || !getProject()->getMachine()) {
+    TuringMachine* machine = getActiveMachine();
+    if (!machine) {
         return;
     }
-
-    TuringMachine* machine = getProject()->getMachine();
 
     // Set the active tape in the machine
     machine->setTape(m_tape.get());
@@ -121,11 +116,10 @@ void TapeDocument::pause()
 
 void TapeDocument::stop()
 {
-    if (!getProject() || !getProject()->getMachine()) {
+    TuringMachine* machine = getActiveMachine();
+    if (!machine) {
         return;
     }
-
-    TuringMachine* machine = getProject()->getMachine();
 
     // Set the active tape in the machine
     machine->setTape(m_tape.get());
@@ -141,20 +135,20 @@ void TapeDocument::stop()
 
 bool TapeDocument::canStepBackward() const
 {
-    if (!getProject() || !getProject()->getMachine()) {
+    TuringMachine* machine = getActiveMachine();
+    if (!machine) {
         return false;
     }
 
-    return getProject()->getMachine()->canStepBackward();
+    return machine->canStepBackward();
 }
 
 bool TapeDocument::stepBackward()
 {
-    if (!getProject() || !getProject()->getMachine()) {
+    TuringMachine* machine = getActiveMachine();
+    if (!machine) {
         return false;
     }
-
-    TuringMachine* machine = getProject()->getMachine();
 
     // Set the active tape in the machine
     machine->setTape(m_tape.get());
@@ -164,4 +158,117 @@ bool TapeDocument::stepBackward()
 
     emit executionStateChanged();
     return success;
+}
+
+bool TapeDocument::loadFromFile(const std::string& filePath)
+{
+    QFile file(QString::fromStdString(filePath));
+    if (!file.open(QIODevice::ReadOnly)) {
+        qWarning() << "Failed to open tape file for reading:" << file.errorString();
+        return false;
+    }
+
+    QByteArray data = file.readAll();
+    QJsonDocument doc = QJsonDocument::fromJson(data);
+
+    if (doc.isNull() || !doc.isObject()) {
+        qWarning() << "Invalid JSON in tape file";
+        file.close();
+        return false;
+    }
+
+    QJsonObject rootObj = doc.object();
+
+    // Load initial content if present
+    if (rootObj.contains("initialContent")) {
+        m_initialContent = rootObj["initialContent"].toString().toStdString();
+    } else {
+        m_initialContent = "";
+    }
+
+    // Load initial head position if present
+    if (rootObj.contains("initialHeadPosition")) {
+        m_initialHeadPosition = rootObj["initialHeadPosition"].toInt();
+    } else {
+        m_initialHeadPosition = 0;
+    }
+
+    // Load tape cells if present
+    if (rootObj.contains("cells") && rootObj["cells"].isArray()) {
+        QJsonArray cellsArray = rootObj["cells"].toArray();
+        std::map<int, std::string> cellsMap;
+
+        for (const QJsonValue& cellValue : cellsArray) {
+            QJsonObject cellObj = cellValue.toObject();
+            int pos = cellObj["pos"].toInt();
+            std::string val = cellObj["val"].toString().toStdString();
+            cellsMap[pos] = val;
+        }
+
+        // Set the tape content
+        m_tape->setContentFromMap(cellsMap);
+    } else {
+        // Otherwise just use initial content
+        m_tape->setInitialContent(m_initialContent);
+    }
+
+    // Set head position
+    m_tape->setHeadPosition(m_initialHeadPosition);
+
+    // Update document properties
+    setFilePath(filePath);
+    setModified(false);
+
+    emit tapeContentChanged();
+
+    return true;
+}
+
+bool TapeDocument::saveToFile(const std::string& filePath)
+{
+    QJsonObject rootObj;
+
+    // Save initial content and head position
+    rootObj["initialContent"] = QString::fromStdString(m_initialContent);
+    rootObj["initialHeadPosition"] = m_initialHeadPosition;
+
+    // Save cells
+    QJsonArray cellsArray;
+    auto cellsMap = m_tape->getAllNonBlankCells();
+
+    for (const auto& cell : cellsMap) {
+        QJsonObject cellObj;
+        cellObj["pos"] = cell.first;
+        cellObj["val"] = QString::fromStdString(cell.second);
+        cellsArray.append(cellObj);
+    }
+
+    rootObj["cells"] = cellsArray;
+
+    // Write to file
+    QJsonDocument doc(rootObj);
+    QFile file(QString::fromStdString(filePath));
+
+    if (!file.open(QIODevice::WriteOnly)) {
+        qWarning() << "Failed to open tape file for writing:" << file.errorString();
+        return false;
+    }
+
+    file.write(doc.toJson());
+    file.close();
+
+    return true;
+}
+
+void TapeDocument::onActiveMachineUpdated(TuringMachine* machine)
+{
+    if (machine) {
+        // Notify that the execution state may have changed due to a new machine
+        emit executionStateChanged();
+    }
+}
+
+TuringMachine* TapeDocument::getActiveMachine() const
+{
+    return SessionManager::getInstance().getActiveMachine();
 }

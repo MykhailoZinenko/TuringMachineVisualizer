@@ -1,6 +1,9 @@
 #include "TapeControlWidget.h"
+#include "../core/SessionManager.h"
+#include "../model/Tape.h"
+#include "../document/TapeDocument.h"
+#include "TapeWidget.h"
 
-// Qt includes
 #include <QHBoxLayout>
 #include <QVBoxLayout>
 #include <QGroupBox>
@@ -12,23 +15,35 @@
 #include <QSpinBox>
 #include <QSlider>
 #include <QCheckBox>
+#include <QDebug>
 
-// Project includes
-#include "../model/Tape.h"
-#include "TapeWidget.h"
-
-TapeControlWidget::TapeControlWidget(Tape* tape, TapeWidget* tapeWidget, QWidget *parent)
-    : QWidget(parent), m_tape(tape), m_tapeWidget(tapeWidget)
+TapeControlWidget::TapeControlWidget(TapeWidget* tapeWidget, QWidget *parent)
+    : QWidget(parent), m_tape(nullptr), m_tapeWidget(tapeWidget)
 {
     setupUI();
     updateCurrentTapeLabel();
-    connect(m_tapeWidget, &TapeWidget::tapeModified, this, &TapeControlWidget::onTapeModified);
+
+    // Connect to tape widget signals
+    if (m_tapeWidget) {
+        connect(m_tapeWidget, &TapeWidget::tapeModified, this, &TapeControlWidget::onTapeModified);
+    }
+
+    // Connect to SessionManager signals
+    connect(&SessionManager::getInstance(), &SessionManager::activeTapeDocumentChanged,
+            [this](TapeDocument* doc) {
+                if (doc) {
+                    onActiveTapeChanged(doc->getTape());
+                } else {
+                    onActiveTapeChanged(nullptr);
+                }
+            });
+
+    // Initialize with current active tape
+    updateForActiveTape();
 }
 
-void TapeControlWidget::setTape(Tape* tape)
+TapeControlWidget::~TapeControlWidget()
 {
-    m_tape = tape;
-    resetTape();
 }
 
 void TapeControlWidget::setupUI()
@@ -71,7 +86,7 @@ void TapeControlWidget::setupUI()
     QVBoxLayout* controlLayout = new QVBoxLayout(controlGroupBox);
 
     m_interactiveModeCheckbox = new QCheckBox(tr("Interactive Mode (click to move head, double-click to edit)"), this);
-    m_interactiveModeCheckbox->setChecked(m_tapeWidget->isInteractiveMode());
+    m_interactiveModeCheckbox->setChecked(m_tapeWidget ? m_tapeWidget->isInteractiveMode() : true);
     connect(m_interactiveModeCheckbox, &QCheckBox::toggled, this, &TapeControlWidget::toggleInteractiveMode);
     controlLayout->addWidget(m_interactiveModeCheckbox);
 
@@ -100,9 +115,11 @@ void TapeControlWidget::setupUI()
     QPushButton* zoomInButton = new QPushButton(tr("+"), this);
     QPushButton* zoomOutButton = new QPushButton(tr("-"), this);
     QPushButton* resetZoomButton = new QPushButton(tr("Reset Zoom"), this);
-    connect(zoomInButton, &QPushButton::clicked, m_tapeWidget, &TapeWidget::zoomIn);
-    connect(zoomOutButton, &QPushButton::clicked, m_tapeWidget, &TapeWidget::zoomOut);
-    connect(resetZoomButton, &QPushButton::clicked, m_tapeWidget, &TapeWidget::resetZoom);
+    if (m_tapeWidget) {
+        connect(zoomInButton, &QPushButton::clicked, m_tapeWidget, &TapeWidget::zoomIn);
+        connect(zoomOutButton, &QPushButton::clicked, m_tapeWidget, &TapeWidget::zoomOut);
+        connect(resetZoomButton, &QPushButton::clicked, m_tapeWidget, &TapeWidget::resetZoom);
+    }
     zoomLayout->addWidget(new QLabel(tr("Zoom:")));
     zoomLayout->addWidget(zoomOutButton);
     zoomLayout->addWidget(resetZoomButton);
@@ -126,6 +143,44 @@ void TapeControlWidget::setupUI()
     mainLayout->addWidget(inputGroupBox);
     mainLayout->addWidget(controlGroupBox);
     mainLayout->addStretch();
+
+    // Set initial enabled state
+    bool hasActiveTape = (getActiveTape() != nullptr);
+    m_setTapeButton->setEnabled(hasActiveTape);
+    m_resetTapeButton->setEnabled(hasActiveTape);
+    m_shiftLeftButton->setEnabled(hasActiveTape);
+    m_shiftRightButton->setEnabled(hasActiveTape);
+}
+
+void TapeControlWidget::updateForActiveTape()
+{
+    m_tape = getActiveTape();
+
+    // Update UI state
+    bool hasTape = (m_tape != nullptr);
+    m_setTapeButton->setEnabled(hasTape);
+    m_resetTapeButton->setEnabled(hasTape);
+    m_shiftLeftButton->setEnabled(hasTape);
+    m_shiftRightButton->setEnabled(hasTape);
+    m_tapeContentEdit->setEnabled(hasTape);
+    m_initialHeadPositionSpin->setEnabled(hasTape);
+
+    // Update tape widget
+    if (m_tapeWidget) {
+        m_tapeWidget->setTape(m_tape);
+        m_tapeWidget->updateTapeDisplay();
+    }
+
+    // Update content display
+    if (m_tape) {
+        m_tapeContentEdit->setText(QString::fromStdString(m_tape->getCurrentContent()));
+        m_initialHeadPositionSpin->setValue(m_tape->getHeadPosition());
+    } else {
+        m_tapeContentEdit->clear();
+        m_initialHeadPositionSpin->setValue(0);
+    }
+
+    updateCurrentTapeLabel();
 }
 
 void TapeControlWidget::toggleInteractiveMode(bool enabled)
@@ -143,9 +198,12 @@ void TapeControlWidget::onTapeModified()
 
 void TapeControlWidget::resetTape()
 {
+    m_tape = getActiveTape();
     if (m_tape) {
         m_tape->reset();
-        m_tapeWidget->updateTapeDisplay();
+        if (m_tapeWidget) {
+            m_tapeWidget->updateTapeDisplay();
+        }
         updateCurrentTapeLabel();
         emit tapeContentChanged();
     }
@@ -153,6 +211,7 @@ void TapeControlWidget::resetTape()
 
 void TapeControlWidget::setTapeContent()
 {
+    m_tape = getActiveTape();
     if (m_tape) {
         QString content = m_tapeContentEdit->text();
         int headPos = m_initialHeadPositionSpin->value();
@@ -161,40 +220,70 @@ void TapeControlWidget::setTapeContent()
         m_tape->setInitialContent(content.toStdString());
         m_tape->setHeadPosition(headPos);
 
-        m_tapeWidget->updateTapeDisplay();
+        if (m_tapeWidget) {
+            m_tapeWidget->updateTapeDisplay();
+        }
         updateCurrentTapeLabel();
         emit tapeContentChanged();
+
+        // Also update the tape document
+        TapeDocument* doc = dynamic_cast<TapeDocument*>(SessionManager::getInstance().getActiveTapeDocument());
+        if (doc) {
+            doc->setInitialContent(content.toStdString());
+            doc->setInitialHeadPosition(headPos);
+        }
     }
 }
 
 void TapeControlWidget::shiftLeft()
 {
+    m_tape = getActiveTape();
     if (m_tape) {
         m_tape->moveLeft();
-        m_tapeWidget->animateHeadMovement(false);
+        if (m_tapeWidget) {
+            m_tapeWidget->animateHeadMovement(false);
+        }
         updateCurrentTapeLabel();
     }
 }
 
 void TapeControlWidget::shiftRight()
 {
+    m_tape = getActiveTape();
     if (m_tape) {
         m_tape->moveRight();
-        m_tapeWidget->animateHeadMovement(true);
+        if (m_tapeWidget) {
+            m_tapeWidget->animateHeadMovement(true);
+        }
         updateCurrentTapeLabel();
     }
 }
 
 void TapeControlWidget::updateCurrentTapeLabel()
 {
+    m_tape = getActiveTape();
     if (m_tape) {
         QString content = QString::fromStdString(m_tape->getCurrentContent(20));
         int headPos = m_tape->getHeadPosition();
-        
+
         QString displayText = tr("Position: %1,  Content: %2")
             .arg(headPos)
             .arg(content);
-            
+
         m_currentTapeLabel->setText(displayText);
+    } else {
+        m_currentTapeLabel->setText(tr("No active tape"));
     }
+}
+
+void TapeControlWidget::onActiveTapeChanged(Tape* tape)
+{
+    m_tape = tape;
+    updateForActiveTape();
+}
+
+Tape* TapeControlWidget::getActiveTape() const
+{
+    TapeDocument* doc = dynamic_cast<TapeDocument*>(SessionManager::getInstance().getActiveTapeDocument());
+    return doc ? doc->getTape() : nullptr;
 }

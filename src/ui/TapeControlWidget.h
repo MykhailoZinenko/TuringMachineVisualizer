@@ -19,8 +19,11 @@ class TapeControlWidget : public QWidget
     Q_OBJECT
 
 public:
-    explicit TapeControlWidget(Tape* tape, TapeWidget* tapeWidget, QWidget *parent = nullptr);
-    void setTape(Tape* tape);
+    explicit TapeControlWidget(TapeWidget* tapeWidget, QWidget *parent = nullptr);
+    ~TapeControlWidget();
+
+    // Update the widget when the active tape changes
+    void updateForActiveTape();
 
     signals:
         void tapeContentChanged();
@@ -33,10 +36,11 @@ public:
     void shiftRight();
     void toggleInteractiveMode(bool enabled);
     void onTapeModified();
+    void onActiveTapeChanged(Tape* tape);
 
 private:
     // Data
-    Tape* m_tape;
+    Tape* m_tape;  // Non-owning reference to active tape
     TapeWidget* m_tapeWidget;
 
     // UI elements
@@ -54,4 +58,7 @@ private:
     // Setup methods
     void setupUI();
     void updateCurrentTapeLabel();
+
+    // Helper to get active tape from SessionManager
+    Tape* getActiveTape() const;
 };

@@ -5,15 +5,13 @@ int main(int argc, char *argv[])
 {
     QApplication app(argc, argv);
 
-    // Set application metadata
-    QCoreApplication::setOrganizationName("YourOrganization");
-    QCoreApplication::setApplicationName("Turing Machine Visualizer");
-    QCoreApplication::setApplicationVersion("0.2");
+    // Set application information
+    app.setOrganizationName("TuringMachineVisualizer");
+    app.setApplicationName("Turing Machine Visualizer");
+    app.setApplicationVersion("1.0");
 
-    // Create and show the main window
+    // Create and show main window
     MainWindow mainWindow;
-    mainWindow.setWindowTitle("Turing Machine Visualizer");
-    mainWindow.resize(1024, 768);
     mainWindow.show();
 
     return app.exec();

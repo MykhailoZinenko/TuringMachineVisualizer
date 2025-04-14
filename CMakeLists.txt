@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(TuringMachineVisualizer VERSION 0.2 LANGUAGES CXX)
+project(TuringMachineVisualizer VERSION 1.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -18,72 +18,94 @@ set(SOURCES
         # Main
         src/main.cpp
 
-        # Project
-        src/project/Project.cpp
-        src/project/ProjectManager.cpp
+        # Core components
+        src/core/SessionManager.cpp
+        src/core/FileWatcher.cpp
 
-        # Document
+        # Document classes
         src/document/Document.cpp
         src/document/CodeDocument.cpp
         src/document/TapeDocument.cpp
+
+        # Model classes
+        src/model/State.cpp
+        src/model/Tape.cpp
+        src/model/Transition.cpp
+        src/model/TuringMachine.cpp
 
         # Parser
         src/parser/CodeParser.cpp
 
         # UI - Main components
         src/ui/MainWindow.cpp
-        src/ui/DocumentTabManager.cpp
+        src/ui/FileListManager.cpp
+        src/ui/CodeTabManager.cpp
+        src/ui/TapeTabManager.cpp
 
-        # UI - Document Views
-        src/ui/document/DocumentView.cpp
-        src/ui/document/CodeEditorView.cpp
-        src/ui/document/TapeVisualizationView.cpp
+        # UI - Views
+        src/ui/CodeEditorView.cpp
+        src/ui/TuringMachineSyntaxHighlighter.cpp
+        src/ui/TapeVisualizationView.cpp
 
-        # Existing UI components
+        # UI - State & Transition Management
+        src/ui/StateDialog.cpp
+        src/ui/StatesListWidget.cpp
+        src/ui/TransitionDialog.cpp
+        src/ui/TransitionsListWidget.cpp
+
+        # UI - Tape & Properties
         src/ui/TapeWidget.cpp
-
-        # Model
-        src/model/Tape.cpp
-        src/model/State.cpp
-        src/model/Transition.cpp
-        src/model/TuringMachine.cpp
+        src/ui/TapeControlWidget.cpp
+        src/ui/PropertiesEditorWidget.cpp
+        src/ui/PreferencesDialog.cpp
 )
 
 # Set header files
 set(HEADERS
-        # Project
-        src/project/Project.h
-        src/project/ProjectManager.h
+        # Core components
+        src/core/SessionManager.h
+        src/core/FileWatcher.h
 
-        # Document
+        # Document classes
         src/document/Document.h
         src/document/CodeDocument.h
         src/document/TapeDocument.h
+
+        # Model classes
+        src/model/State.h
+        src/model/Tape.h
+        src/model/Transition.h
+        src/model/TuringMachine.h
 
         # Parser
         src/parser/CodeParser.h
 
         # UI - Main components
         src/ui/MainWindow.h
-        src/ui/DocumentTabManager.h
+        src/ui/FileListManager.h
+        src/ui/CodeTabManager.h
+        src/ui/TapeTabManager.h
 
-        # UI - Document Views
-        src/ui/document/DocumentView.h
-        src/ui/document/CodeEditorView.h
-        src/ui/document/TapeVisualizationView.h
+        # UI - Views
+        src/ui/CodeEditorView.h
+        src/ui/TuringMachineSyntaxHighlighter.h
+        src/ui/TapeVisualizationView.h
 
-        # Existing UI components
+        # UI - State & Transition Management
+        src/ui/StateDialog.h
+        src/ui/StatesListWidget.h
+        src/ui/TransitionDialog.h
+        src/ui/TransitionsListWidget.h
+
+        # UI - Tape & Properties
         src/ui/TapeWidget.h
-
-        # Model
-        src/model/Tape.h
-        src/model/State.h
-        src/model/Transition.h
-        src/model/TuringMachine.h
+        src/ui/TapeControlWidget.h
+        src/ui/PropertiesEditorWidget.h
+        src/ui/PreferencesDialog.h
 )
 
 # Include directories
-include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src)
+include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 
 # Create resources file if needed
 set(RESOURCES
@@ -120,9 +142,9 @@ install(TARGETS TuringMachineVisualizer
 if(APPLE)
     set_target_properties(TuringMachineVisualizer PROPERTIES
             MACOSX_BUNDLE TRUE
-            MACOSX_BUNDLE_GUI_IDENTIFIER "com.yourcompany.turingmachinevisualizer"
+            MACOSX_BUNDLE_GUI_IDENTIFIER "com.turingvisualizer.app"
             MACOSX_BUNDLE_BUNDLE_NAME "Turing Machine Visualizer"
             MACOSX_BUNDLE_BUNDLE_VERSION "${PROJECT_VERSION}"
-            MACOSX_BUNDLE_SHORT_VERSION_STRING "${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}"
+            MACOSX_BUNDLE_SHORT_VERSION_STRING "${PROJECT_VERSION}"
     )
 endif()

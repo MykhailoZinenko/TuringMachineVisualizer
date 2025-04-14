@@ -4,8 +4,8 @@
 #include "../document/TapeDocument.h"
 #include "../project/Project.h"
 #include "document/DocumentView.h"
-#include "document/CodeEditorView.h"
-#include "document/TapeVisualizationView.h"
+#include "CodeEditorView.h"
+#include "TapeVisualizationView.h"
 #include <QMenu>
 #include <QAction>
 #include <QMessageBox>
